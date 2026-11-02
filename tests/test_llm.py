@@ -100,6 +100,13 @@ def test_harden_closes_the_nested_models_under_defs():
     assert "default" not in row["properties"]["label"]
 
 
+@pytest.fixture(autouse=True)
+def _openrouter_key(monkeypatch):
+    """Every request here goes to a mock transport, but the client refuses to
+    build OpenRouter headers without a key, so each test gets a placeholder."""
+    monkeypatch.setattr(llm.settings, "openrouter_api_key", "or-test")
+
+
 async def test_a_reply_cut_off_in_schema_mode_is_not_held_against_the_model(monkeypatch):
     """Truncation is the token ceiling talking. Marking the model as lacking
     json_schema mode after one long reply moved every later call in the process
