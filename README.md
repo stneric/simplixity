@@ -1,9 +1,13 @@
+<img src="web/icon.svg" alt="" width="72" height="72">
+
 # Simplixity
 
-A self-hosted research assistant. You ask a question, it searches the web
+A self-hosted (re)search assistant. You ask a question, it searches the web
 through your own SearXNG instance, reads the pages it finds and writes an
 answer in which every claim cites a numbered source. A second pass then checks
 each cited sentence against the source it cites and shows you the result.
+
+![An answer in Simplixity: a comparison table with a citation number on every row, followed by the written answer](docs/screenshot.png)
 
 It runs as three containers (the app, Redis, SearXNG), works with any model on
 OpenRouter, Groq, Ollama or LM Studio, and has no frontend build step.
@@ -74,7 +78,7 @@ each run is doing.
 
 Ollama and LM Studio running on the host are discovered automatically. Without
 an OpenRouter key the app still runs on them; embeddings then fall back to
-keyword ranking.
+keyword ranking. Note that the redaction tool requires a local model.
 
 ### Without Docker
 
@@ -110,7 +114,7 @@ only used until something is picked.
 The compose file publishes port 3000 on `127.0.0.1` only. The app has no TLS,
 and profiles keep people apart but are not hardened authentication, so put it
 behind a reverse proxy, and preferably behind an access layer such as an
-authenticating proxy or a VPN.
+authenticating proxy or a VPN. I personally use Dokploy with Traefik and Cloudflare.
 
 For Traefik (including Dokploy and Coolify), an overlay adds the network and
 routing labels:
