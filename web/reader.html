@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Reader · Simplixity</title>
+    <link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/vendor/pdfjs/text_layer.css" />
+  </head>
+  <body>
+    <!-- The reader (web/reader.js): a cited page of one of the person's PDFs,
+         with the passages the answer rests on highlighted. Served at
+         /library/{file}/{page} for every citation; what to highlight comes in
+         the fragment. Everything is built by the script, from textContent. -->
+    <div class="reader" id="reader">
+      <header class="reader-top">
+        <div class="reader-titles">
+          <p class="reader-title" id="reader-title">Loading…</p>
+          <p class="reader-meta" id="reader-meta"></p>
+        </div>
+        <div class="reader-nav">
+          <button type="button" class="icon-btn" id="reader-prev" aria-label="Previous page" title="Previous page (←)">
+            <i data-icon="back" data-size="16"></i>
+          </button>
+          <span class="reader-pageno" id="reader-pageno"></span>
+          <button type="button" class="icon-btn reader-next" id="reader-next" aria-label="Next page" title="Next page (→)">
+            <i data-icon="back" data-size="16"></i>
+          </button>
+          <a class="confirm-btn" id="reader-download" download>
+            <i data-icon="download" data-size="15"></i><span>PDF</span>
+          </a>
+        </div>
+      </header>
+      <div class="reader-body">
+        <aside class="reader-side" id="reader-side" aria-label="Cited passages"></aside>
+        <main class="reader-pages" id="reader-pages"></main>
+      </div>
+    </div>
+    <script type="module" src="/static/reader.js"></script>
+  </body>
+</html>

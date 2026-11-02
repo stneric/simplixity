@@ -1,0 +1,204 @@
+configs:
+  searxng_settings:
+    content: |
+      use_default_settings:
+        engines:
+          remove:
+            # need a Tor proxy and fail to load without one
+            - ahmia
+            - torch
+            # query.wikidata.org answers HTTP 403 during engine init
+            - wikidata
+          keep_only:
+            # The engines the source lenses name (see app/search/lenses.py), plus
+            # the ones SearXNG needs for its own bang syntax. Anything else in
+            # the default set is a dictionary, a torrent tracker or a shopping
+            # site, and a research answer built on one of those is a bug.
+            - google cse
+            - duckduckgo
+            - bing
+            - mojeek
+            - brave
+            - startpage
+            - qwant
+            # Breadth, because the big ones suspend themselves: a self-hosted
+            # instance scrapes what a browser would, from one address, and
+            # Brave, Qwant, Startpage and Google CSE all rate-limit or CAPTCHA
+            # under a working day's load: measured here at one of six still
+            # answering, which is when a run starts citing whatever the survivor
+            # had. `fireball` needs no key and indexes German. (`yep` answers
+            # this instance with "access denied", and `dogpile`/`swisscows` are
+            # not in this image at all. An unknown name here silently disables
+            # the engine filter, which is worse than not naming it.)
+            - fireball
+            - wikipedia
+            - wikisource
+            - wikibooks
+            - wikiquote
+            - openlibrary
+            - wolframalpha
+            - arxiv
+            - crossref
+            - pubmed
+            - semantic scholar
+            - openalex
+            - google scholar
+            - openairepublications
+            - reuters
+            - bing news
+            - duckduckgo news
+            - google news
+            - mojeek news
+            - wikinews
+            - tagesschau
+            - github
+            - stackoverflow
+            - mdn
+            - microsoft learn
+            - arch linux wiki
+            - askubuntu
+            - superuser
+            - hackernews
+            - lobste.rs
+            - docker hub
+            - pypi
+            - npm
+            # The structured weather lookup (`app/search/weather.py`). Without
+            # them no service ever answers, and every "wie wird das Wetter
+            # morgen" falls back to reading five forecast pages: half a minute
+            # for a question that is a single API call.
+            - wttr.in
+            - duckduckgo weather
+            # Named by the data lens for conversions; missing here, it simply
+            # never answered. No dictionary joins it: a dictionary matches a
+            # *word*, so "wie wird das Wetter" comes back as the entry for
+            # "wie"; see the note on the reference lens.
+            - currency
+            # The images lens (`app/search/lenses.py`). Without these the
+            # instance has *no* engine in the images category at all, and every
+            # picture search (the portrait on a profile card, the "what does X
+            # look like" answer) silently returns general web results with no
+            # `img_src`, which the run then drops as unusable.
+            - wikicommons.images
+            - openverse
+            - duckduckgo images
+            - bing images
+            - google cse images
+      # Kept but off in SearXNG's defaults; the app asks for them by name, and
+      # an engine that is disabled answers nothing while looking present.
+      engines:
+        - name: fireball
+          disabled: false
+      server:
+        secret_key: "${SEARXNG_SECRET:?SEARXNG_SECRET is required, see .env.example}"
+        limiter: false
+        image_proxy: true
+      outgoing:
+        # A search answers only once its slowest engine has, and the image ships
+        # `max_request_timeout` commented out, which leaves that wait bounded
+        # only by the engines' own timeouts. An engine that hangs instead of
+        # refusing then carries the request past the app's SEARCH_TIMEOUT_S
+        # (15s), and the whole query is lost, including the results the other
+        # engines had already returned. It shows up as a run that found nothing
+        # while the instance is healthy and answers a manual query in a second.
+        #
+        # This ceiling sits below that timeout, so a slow engine costs its own
+        # results and nothing else. Keep it below SEARCH_TIMEOUT_S if either
+        # value is ever changed.
+        request_timeout: 3.0
+        max_request_timeout: 10.0
+      search:
+        safe_search: 0
+        autocomplete: ""
+        # `json` is what makes SearXNG usable as an API; without it every
+        # search returns HTTP 403.
+        formats:
+          - html
+          - json
+
+services:
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    restart: unless-stopped
+    configs:
+      - source: searxng_settings
+        target: /etc/searxng/settings.yml
+    environment:
+      - SEARXNG_BASE_URL=https://${SIMPLIXITY_DOMAIN:-localhost}/
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    networks:
+      - internal
+
+  redis:
+    image: docker.io/redis:7-alpine
+    restart: unless-stopped
+    # appendonly: in-flight research runs must survive a Redis restart.
+    # noeviction: silently dropping a live run's event stream is worse than an error.
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - internal
+
+  simplixity:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      searxng:
+        condition: service_started
+    # Every setting in .env.example reaches the app through this file, so a
+    # variable added there needs no second entry here.
+    env_file:
+      - path: .env
+        required: false
+    # Wiring between the containers. These win over .env, which describes a
+    # local run where Redis and SearXNG live on localhost.
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SEARXNG_API_URL=http://searxng:8080
+      - DATABASE_PATH=/data/simplixity.db
+      # Local runtimes live on the *host*, so localhost inside this container
+      # would point at the container itself and discovery would find nothing.
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - LMSTUDIO_BASE_URL=${LMSTUDIO_BASE_URL:-http://host.docker.internal:1234}
+    extra_hosts:
+      # Docker Desktop and OrbStack define this already; host-gateway makes it
+      # resolve on plain Linux too.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - simplixity-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:3000/api/health')\""]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    ports:
+      # Bound to the loopback interface: there is no TLS here, and profiles are
+      # not hardened auth. Put a reverse proxy in front to reach it from
+      # elsewhere (see deploy/traefik.yml), or set SIMPLIXITY_BIND=0.0.0.0 on
+      # a trusted network.
+      - "${SIMPLIXITY_BIND:-127.0.0.1}:${SIMPLIXITY_PORT:-3000}:3000"
+    networks:
+      - internal
+
+volumes:
+  simplixity-data:
+  redis-data:
+
+networks:
+  internal:

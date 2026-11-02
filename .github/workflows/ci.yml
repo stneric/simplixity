@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check app tests tools
+      - run: uv run ruff format --check app tests tools
+      - run: uv run pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test "tests/frontend/*.test.mjs"
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose files
+        env:
+          SEARXNG_SECRET: ci
+          SIMPLIXITY_DOMAIN: ci.example.com
+        run: |
+          docker compose config --quiet
+          docker compose -f docker-compose.yml -f deploy/traefik.yml config --quiet
+      - name: Build image
+        run: docker build -t simplixity:ci .

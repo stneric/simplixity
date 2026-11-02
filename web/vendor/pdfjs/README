@@ -1,0 +1,2 @@
+pdf.js 6.4.299 (Apache-2.0), from the pdfjs-dist npm package, build/pdf.min.mjs and
+build/pdf.worker.min.mjs, unmodified. Used by web/reader.js only.

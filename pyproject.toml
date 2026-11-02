@@ -1,0 +1,67 @@
+[project]
+name = "simplixity"
+version = "0.1.0"
+description = "Self-hosted research assistant that answers with checked citations"
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "httpx>=0.28",
+    "redis>=5.2",
+    "aiosqlite>=0.20",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "pypdf>=5",
+]
+
+[project.urls]
+Repository = "https://github.com/stneric/simplixity"
+Issues = "https://github.com/stneric/simplixity/issues"
+
+# No provider SDKs, on purpose: OpenRouter, Groq, Ollama and LM Studio all speak
+# the OpenAI wire format, so app/llm/client.py serves all four with one
+# implementation and explicit timeouts. See its module docstring.
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "fakeredis>=2.26",
+    "ruff>=0.9",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes: undefined names, unused imports
+    "I",         # import order
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "SIM",       # simplify
+    "C4",        # comprehensions
+    "DTZ",       # naive datetimes
+    "ASYNC",     # blocking calls in async code
+    "RUF",
+]
+ignore = [
+    # The codebase leans on broad excepts on purpose: a research run must always
+    # reach the user with an explanation rather than dying silently. Each one is
+    # commented where it appears.
+    "B904",
+]
+# Typographic characters in prose and prompts are intentional, not homoglyph
+# attacks: the UI is written with real quotes and dashes.
+allowed-confusables = ["’", "“", "”", "—", "–", "×", "·", "…"]

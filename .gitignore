@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env
+data/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+
+# Local agent and editor state
+.claude/
+CLAUDE.md

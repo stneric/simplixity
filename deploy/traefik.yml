@@ -1,0 +1,32 @@
+# Optional overlay for a server where Traefik already runs (plain Traefik,
+# Dokploy, Coolify and similar). It joins the proxy's network and adds the
+# routing labels; nothing in the base file depends on it.
+#
+#   SIMPLIXITY_DOMAIN=research.example.com \
+#   docker compose -f docker-compose.yml -f deploy/traefik.yml up -d --build
+#
+# PROXY_NETWORK is the external network Traefik watches (`dokploy-network` on
+# Dokploy, `coolify` on Coolify). The entrypoint and certificate resolver names
+# below match Traefik's common defaults; change them to whatever your static
+# configuration calls them.
+
+services:
+  simplixity:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${PROXY_NETWORK:-traefik}"
+      - "traefik.http.routers.simplixity.rule=Host(`${SIMPLIXITY_DOMAIN:?set SIMPLIXITY_DOMAIN}`)"
+      - "traefik.http.routers.simplixity.entrypoints=websecure"
+      - "traefik.http.routers.simplixity.tls.certresolver=letsencrypt"
+      - "traefik.http.services.simplixity.loadbalancer.server.port=3000"
+      # SSE must not be buffered, or the answer arrives all at once at the end.
+      - "traefik.http.middlewares.simplixity-sse.headers.customresponseheaders.X-Accel-Buffering=no"
+      - "traefik.http.routers.simplixity.middlewares=simplixity-sse"
+    networks:
+      - internal
+      - proxy
+
+networks:
+  proxy:
+    name: ${PROXY_NETWORK:-traefik}
+    external: true

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The tab-sized cut of web/icon.svg, which carries the reasoning. Rounded
+       here because nothing masks a favicon, and the glyph is filled rather than
+       stroked like its UI cousin in icons.js: at 16px a 1.75 stroke silts up,
+       a solid mark stays a mark. -->
+  <rect width="32" height="32" rx="7.5" fill="#1a1a1a" />
+  <path
+    d="M16 5.5 Q19.25 12.75 26.5 16 Q19.25 19.25 16 26.5 Q12.75 19.25 5.5 16 Q12.75 12.75 16 5.5 Z"
+    fill="#ffffff"
+  />
+</svg>

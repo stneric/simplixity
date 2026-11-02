@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Build a reading list of scientific literature, screen it, export BibTeX." />
+    <title>Literature · Simplixity</title>
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#171717" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <!-- The literature page (web/literature.js). A page of its own rather than
+         a dialog over the chat: screening a reading list is an afternoon's
+         work, and it wants an address that can be bookmarked. Everything below
+         the shell is built by the script, from textContent only. -->
+    <div class="lit-app" id="lit-app">
+      <aside class="lit-side" aria-label="Reading lists">
+        <a class="sidebar-item lit-back" href="/">
+          <i data-icon="back" data-size="16"></i><span>Back to chat</span>
+        </a>
+        <h1 class="lit-brand"><i data-icon="library" data-size="18"></i><span>Literature</span></h1>
+        <button type="button" class="sidebar-item lit-new" id="lit-new">
+          <i data-icon="plus" data-size="16"></i><span>New reading list</span>
+        </button>
+        <p class="lit-side-label">Reading lists</p>
+        <nav class="lit-lists" id="lit-lists"></nav>
+        <p class="hint lit-sources" id="lit-sources"></p>
+      </aside>
+
+      <main class="lit-main" id="lit-main"></main>
+    </div>
+
+    <script type="module" src="/static/literature.js"></script>
+  </body>
+</html>

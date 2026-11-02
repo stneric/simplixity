@@ -1,0 +1,18 @@
+# Build context: only app/ and web/ are ever copied, but a lean context keeps
+# the server-side build fast.
+.git
+.gitignore
+.github
+.venv
+.env
+.env.example
+.pytest_cache
+.ruff_cache
+.claude
+data
+__pycache__
+**/__pycache__
+*.pyc
+tests
+README.md
+docker-compose.yml
