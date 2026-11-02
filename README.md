@@ -48,6 +48,34 @@ OpenRouter, Groq, Ollama or LM Studio, and has no frontend build step.
 - **Profiles.** Several people can share one install with separate chats,
   projects and settings, optionally password-protected.
 
+## How a question is answered
+
+1. **Triage.** Plain string matching, no model call. It catches small talk
+   and weather questions that name a place, and passes everything else on.
+2. **Classifier.** One model call reads the question and the conversation. It
+   rewrites the question so it stands on its own, writes the search queries,
+   and decides how complex the question is, whether it is time-sensitive,
+   which sources fit (web, science, news, docs, reference), and whether the
+   answer should be prose or a card such as a table, a chart or a profile.
+3. **Router.** Turns that verdict into a budget: Simple, Quick, Balanced or
+   Deep. If you picked a depth yourself, it is a ceiling the router may lower
+   but never raise.
+4. **Lookup or research.** Anything a service can answer directly, such as a
+   forecast, is fetched without searching. Otherwise the run searches through
+   SearXNG, drops results that are off-topic, ranks the rest by source type,
+   agreement between engines and embedding similarity, and reads the best
+   pages in full. Deep splits the question into sub-questions, researches them
+   in parallel and runs one more round for gaps it finds.
+5. **Writer.** Writes the answer from the numbered sources, while a card, if
+   the classifier asked for one, is built alongside it.
+6. **Citation check.** A judge model rules on every cited sentence, and
+   quotes and numbers are compared with the source text without a model.
+
+The classifier, the gap check and the citation check can run on a small,
+cheap *router model* set in the settings, and the citation check can get a
+judge model of its own; the answer itself comes from the chat model. The footer under each answer names the models, the engines that
+answered, and anything the router cut.
+
 ## Quick start
 
 You need Docker with Compose v2.24 or newer and an
