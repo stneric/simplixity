@@ -61,13 +61,13 @@ FOLLOW_UPS = 1
 
 
 class Classification(BaseModel):
-    needs_search: bool = True
+    # In the order the model answers them. Strict JSON mode fills properties in
+    # schema order, so a field is decided with only the ones above it in view.
+    # The shape and the picture come before `needs_search` because they are
+    # what makes a search necessary: decided after it, "wie sieht ein Okapi aus"
+    # had already been answered from memory by the time the model got to
+    # noticing the reader wanted to see one.
     standalone_question: str = ""
-    search_queries: list[str] = Field(default_factory=list)
-    # "" | day | week | month | year. Set when the answer depends on the current
-    # state of the world: a page from 2019 is not evidence about this year, and
-    # the whole point of a research tool is not to answer as if it were.
-    recency: str = ""
     # "" or one of `shapes.SHAPES`. How the answer should be laid out, see
     # agent/shapes.py. A price written as prose is a number the reader has to
     # dig out of a paragraph.
@@ -76,14 +76,25 @@ class Classification(BaseModel):
     # engines hand the query straight to a geocoder, which resolves "Berlin" and
     # raises on "weather in Berlin", so the place has to arrive on its own.
     place: str = ""
-    # simple | standard | research. How much work the question is worth, which
-    # is what "Auto" depth resolves against. Two more fields on a call that was
-    # happening anyway. The same trade that bought `recency`.
-    complexity: str = "standard"
     # Whether the reader wants to *see* the thing. A picture can only be shown
     # if a search returned one, so this decides whether the separate image
     # search runs at all.
     wants_image: bool = False
+    # What to search the image archives for: the subject as a caption names it,
+    # in English. The first web query is the fallback, and it is written for a
+    # different index: field terminology for Scholar, the reader's language for
+    # the web. Wikimedia Commons answers "okapi" and not either of those.
+    image_query: str = ""
+    needs_search: bool = True
+    search_queries: list[str] = Field(default_factory=list)
+    # "" | day | week | month | year. Set when the answer depends on the current
+    # state of the world: a page from 2019 is not evidence about this year, and
+    # the whole point of a research tool is not to answer as if it were.
+    recency: str = ""
+    # simple | standard | research. How much work the question is worth, which
+    # is what "Auto" depth resolves against. Two more fields on a call that was
+    # happening anyway. The same trade that bought `recency`.
+    complexity: str = "standard"
     # Which corpora to search. Asked for, and honoured, only when the reader
     # chose "Auto" in the source picker. An explicit selection is a decision and
     # is never overridden by this call.
@@ -327,7 +338,7 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
             passages, findings, unanswered = found.passages, found.findings, found.unanswered
             if route.wants_images and ctx.budget.can_research():
                 await research.find_images(
-                    ctx, question, steps, query=queries[0] if queries else ""
+                    ctx, question, steps, query=_image_query(route, queries)
                 )
         else:
             passages = await _research_directly(ctx, question, queries, steps, route)
@@ -393,6 +404,11 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
 
     await ctx.guard()
 
+    # A shape with a picture of its own (a profile, an image answer) chooses it
+    # on its card. Everything else that asked for one shows it here, above the
+    # card and the prose, and without a model call.
+    if route.wants_images and not shapes.wants_image(route.shape):
+        await widgets.show_picture(ctx)
     widget = await _start_card(ctx, route.shape, question, passages)
 
     await steps.finish()
@@ -700,7 +716,7 @@ async def _research_directly(
     """
     await ctx.phase(blocks.PHASE_RESEARCHING)
     pictures = (
-        research.search_images(ctx, question, query=queries[0] if queries else "")
+        research.search_images(ctx, question, query=_image_query(route, queries))
         if route.wants_images
         else None
     )
@@ -829,8 +845,24 @@ async def _classify(ctx: RunContext, steps: Steps, pinned: linked.Linked) -> Cla
             step.text = "Searching the question as asked"
             query = links.remove(ctx.query) or ctx.query
             return Classification(
-                needs_search=True, standalone_question=ctx.query, search_queries=[query]
+                needs_search=True,
+                standalone_question=ctx.query,
+                search_queries=[query],
+                wants_image=route_module.asks_to_see(ctx.query),
             )
+
+        # A picture asked for by name is not left to the model's reading.
+        # Only ever raised: the words decide "yes", the model decides the rest.
+        if not result.wants_image and route_module.asks_to_see(ctx.query):
+            log.info("the question asks for a picture by name; the classifier missed it")
+            result.wants_image = True
+        # A picture can only be shown if a search returned one, so asking to see
+        # something is asking for a search. The two fields are answered in the
+        # same breath and do contradict each other; the picture is the more
+        # specific claim. Settled here so the step below says what will happen.
+        if result.wants_image and not result.needs_search:
+            result.needs_search = True
+        result.image_query = " ".join(result.image_query.split())
 
         # A URL in a query is searched as a string of words. The classifier is
         # told not to write one, and this holds when it does anyway.
@@ -947,6 +979,12 @@ def _keep_library(ctx: RunContext, lenses: list) -> list:
     if ctx.library is None:
         return lenses
     return [lens_module.LIBRARY, *(lens for lens in lenses if lens.id != lens_module.LIBRARY.id)]
+
+
+def _image_query(route: Route, queries: list[str]) -> str:
+    """What the picture search asks for: the classifier's caption-style query,
+    else the first web query, else (in `search_images`) the question itself."""
+    return route.image_query or (queries[0] if queries else "")
 
 
 def _ellipsis(text: str, limit: int = 80) -> str:

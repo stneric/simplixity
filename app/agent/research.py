@@ -29,6 +29,10 @@ log = logging.getLogger(__name__)
 _FLUSH_CHARS = 48
 _FLUSH_SECONDS = 0.12
 
+# Below this many sources a run that rested on a single engine is worth a word.
+# Above it the one engine found enough, and the footer already names it.
+_THIN_SOURCES = 5
+
 
 async def search_and_register(
     ctx: RunContext,
@@ -74,16 +78,17 @@ async def search_and_register(
             f"{len(report.failures)} of {_plural(len(queries), 'search', 'searches')} failed; "
             "answering on the rest."
         )
-    elif _mostly_refused(ctx, report):
+    elif _mostly_refused(ctx, report) and len(ctx.sources) < _THIN_SOURCES:
         # The failure mode of a self-hosted instance without API keys: the free
         # engines suspend one by one under load and the last one standing
-        # answers everything. The results are then whatever that engine had,
-        # and the reader deserves to know the answer rests on one opinion
-        # rather than on a search.
+        # answers everything. On such an instance that is the normal state, so
+        # it is only said when it shows: when the survivor found little. One
+        # engine with twenty good results needs no apology, and the footer
+        # names it either way.
         answered = ", ".join(report.engine_names) or "nothing"
         await ctx.notice(
-            f"Only {answered} answered; {_plural(len(report.refused), 'engine')} refused, "
-            "so this searched a much smaller web than usual.",
+            f"Few sources found, and only {answered} answered; "
+            f"{_plural(len(report.refused), 'engine')} refused.",
             "info",
         )
     return registered
@@ -395,6 +400,7 @@ async def register_images(
             return 0
         ctx.sources.allow_extra(len(pictures))
         registered = await ctx.sources.add(pictures)
+        ctx.pictures.extend(index for index, _result in registered)
         step.text = f"Found {_plural(len(registered), 'picture')}"
         return len(registered)
 

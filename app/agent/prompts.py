@@ -170,9 +170,25 @@ documentation, tools, companies, people, events, prices, laws, science or
 health, and every "how do I…", "what is…" and "why does…" about the world. When
 in doubt, search.
 
-Anything the user wants to *see* always needs a search ("what does X look
-like", "show me X", "wie sieht X aus"), because a picture can only be shown if a
-search returned one. Describing it in words instead is not answering it.
+Set `wants_image` to true when a picture is part of the answer:
+  - the reader asks to see the thing: "what does X look like", "show me X",
+    "wie sieht X aus", "Bild von X", when X is something with an appearance;
+  - the question is about a person, a brand, a product, a place, a building
+    or landmark, an animal or plant, a vehicle, an artwork, a flag or a logo:
+    the reader recognises these by sight, so the picture identifies them.
+Leave it false when there is nothing to look at: a concept, a mechanism, a
+law, a standard, a protocol, an event, a price or figure, a how-to, advice.
+"Wie sieht es mit X aus" and "what does a good X look like" are idioms about
+a situation or a standard, not requests for a picture.
+
+When `wants_image` is true, write `image_query`: the subject as an image
+archive would caption it, a few words in English, the name and nothing else
+("okapi", "flag of Argentina", "Eiffel Tower", "Porsche 911"). Otherwise
+leave it empty.
+
+Anything the user wants to see needs a search, because a picture can only be
+shown if a search returned one. Describing it in words instead is not
+answering it.
 
 Rewrite the question so it stands on its own without the conversation: resolve
 "it", "they", "that version" against the history. Keep the user's language.
@@ -225,12 +241,6 @@ not how interesting the subject is:
     "was sagt die Studienlage zu X". Asking what the research says means the
     answer has to survey it. Length alone never is: a long question about one
     thing is still standard.
-
-Set `wants_image` to true when the reader wants to *see* the thing: "what does
-X look like", "show me X", "wie sieht X aus", or a question about a person,
-logo, flag, building or artwork where a picture is part of the answer. Leave it
-false for everything else; a picture on an answer that did not ask for one is
-decoration.
 
 {shapes}"""
 

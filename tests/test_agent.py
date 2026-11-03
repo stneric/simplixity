@@ -489,7 +489,7 @@ async def test_who_is_x_is_not_restricted_to_recent_news(redis, wired, monkeypat
         return fake_results(), fake_report(len(queries), time_range=time_range)
 
     monkeypatch.setattr(research, "search_all", search_all)
-    wired.classification = {"answer_shape": "profile", "recency": "month"}
+    wired.classification = {"answer_shape": "profile", "wants_image": True, "recency": "month"}
 
     stream = RunStream(redis, "d5", ttl=60)
     await orchestrator.run(stream, request())
@@ -598,7 +598,7 @@ async def test_a_picture_search_says_which_way_it_came_up_empty(redis, wired, mo
         return fake_results(), fake_report(len(queries))
 
     monkeypatch.setattr(research, "search_all", search_all)
-    wired.classification = {"answer_shape": "profile"}
+    wired.classification = {"answer_shape": "profile", "wants_image": True}
 
     stream = RunStream(redis, "d6", ttl=60)
     await orchestrator.run(stream, request())
@@ -616,7 +616,7 @@ async def test_a_picture_search_that_no_engine_answered_says_so(redis, wired, mo
         return fake_results(), fake_report(len(queries))
 
     monkeypatch.setattr(research, "search_all", search_all)
-    wired.classification = {"answer_shape": "profile"}
+    wired.classification = {"answer_shape": "profile", "wants_image": True}
 
     stream = RunStream(redis, "d7", ttl=60)
     await orchestrator.run(stream, request())
@@ -625,6 +625,135 @@ async def test_a_picture_search_that_no_engine_answered_says_so(redis, wired, mo
     research_block = next(b for b in await stream.snapshot() if b["type"] == "research")
     steps = [s["text"] for s in research_block["data"]["sub_steps"]]
     assert any("bing images" in text for text in steps), steps
+
+
+def picture_results(count: int = 2) -> list[SearchResult]:
+    results = [
+        SearchResult(
+            title=f"Okapi {i}",
+            url=f"https://commons.test/okapi-{i}",
+            snippet="",
+            image=f"https://commons.test/okapi-{i}.jpg",
+            engines=["fake images"],
+        )
+        for i in range(1, count + 1)
+    ]
+    for result in results:
+        result.assess()
+    return results
+
+
+@pytest.fixture
+def pictured(monkeypatch):
+    """Search that answers the image lens with pictures, and records what each
+    lens was asked. The evidence carries a thumbnail of its own, which must
+    never be the picture shown."""
+    asked: dict[str, list[str]] = {"images": [], "web": []}
+
+    async def search_all(queries, *, limit_per_query=8, lenses=None, time_range=""):
+        if lenses and lenses[0].id == "images":
+            asked["images"].extend(queries)
+            return picture_results(), fake_report(1)
+        asked["web"].extend(queries)
+        results = fake_results()
+        results[0].image = "https://example1.test/banner.jpg"
+        return results, fake_report(len(queries))
+
+    monkeypatch.setattr(research, "search_all", search_all)
+    return asked
+
+
+async def test_a_prose_answer_that_wants_a_picture_shows_the_one_it_found(redis, wired, pictured):
+    """Observed: the image search ran beside a prose answer, the transcript said
+    "Found 2 pictures", and nothing rendered them, because only a card could."""
+    wired.classification = {
+        "wants_image": True,
+        "image_query": "okapi",
+        "standalone_question": "what does an okapi look like",
+    }
+
+    stream = RunStream(redis, "im1", ttl=60)
+    await orchestrator.run(stream, request())
+
+    _events, emitted, done = await collect(stream)
+    assert done["status"] == "completed"
+    assert emitted.index("image") < emitted.index("text")
+    image = next(b for b in await stream.snapshot() if b["type"] == "image")
+    # The picture search's first result, not the evidence page's banner.
+    assert image["data"]["url"] == "https://commons.test/okapi-1.jpg"
+    # And no model was asked to choose it.
+    assert not any(call.startswith("Picture") for call in wired.calls)
+
+
+async def test_the_picture_search_asks_for_the_subject_not_the_web_query(redis, wired, pictured):
+    wired.classification = {
+        "wants_image": True,
+        "image_query": "okapi",
+        "search_queries": ["okapi lebensraum verbreitung"],
+    }
+
+    stream = RunStream(redis, "im2", ttl=60)
+    await orchestrator.run(stream, request())
+    await collect(stream)
+
+    assert pictured["images"] == ["okapi"]
+
+
+async def test_a_prose_answer_that_wants_no_picture_runs_no_picture_search(redis, wired, pictured):
+    stream = RunStream(redis, "im3", ttl=60)
+    await orchestrator.run(stream, request())
+
+    _events, emitted, _done = await collect(stream)
+    assert pictured["images"] == []
+    assert "image" not in emitted
+
+
+async def test_wanting_a_picture_overrules_answering_from_memory(redis, wired, pictured):
+    """The two fields contradict each other often enough: "wie sieht ein Okapi
+    aus" came back as no search needed, and a direct answer has no picture."""
+    wired.classification = {
+        "needs_search": False,
+        "wants_image": True,
+        "image_query": "okapi",
+        "standalone_question": "wie sieht ein okapi aus",
+    }
+
+    stream = RunStream(redis, "im4", ttl=60)
+    await orchestrator.run(stream, request(query="wie sieht ein okapi aus"))
+
+    _events, emitted, _done = await collect(stream)
+    assert pictured["images"] == ["okapi"]
+    assert "image" in emitted
+
+
+async def test_a_picture_asked_for_by_name_is_searched_when_the_classifier_misses_it(
+    redis, wired, pictured
+):
+    wired.classification = {"standalone_question": "zeig mir ein Bild von einem Okapi"}
+    stream = RunStream(redis, "im5", ttl=60)
+    await orchestrator.run(stream, request(query="zeig mir ein Bild von einem Okapi"))
+
+    _events, emitted, _done = await collect(stream)
+    assert pictured["images"], "the picture search never ran"
+    assert "image" in emitted
+
+
+async def test_a_failed_classifier_still_honours_a_picture_asked_for_by_name(
+    redis, wired, pictured
+):
+    class ClassifierDown(FakeLLM):
+        async def structured(self, messages, schema, **kwargs):
+            if schema is orchestrator.Classification:
+                raise LLMError("router is down")
+            return await super().structured(messages, schema, **kwargs)
+
+    wired.__class__ = ClassifierDown
+    stream = RunStream(redis, "im6", ttl=60)
+    await orchestrator.run(stream, request(query="show me a picture of an okapi"))
+
+    _events, emitted, done = await collect(stream)
+    assert done["status"] == "completed"
+    assert "image" in emitted
 
 
 async def test_a_slow_card_is_built_beside_the_answer_and_still_lands_above_it(

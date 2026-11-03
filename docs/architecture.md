@@ -144,6 +144,17 @@ against the run's numbered sources. A card that cites a source the run never
 retrieved is thrown away. `Filled` is the one place raw model values are
 coerced and trimmed, so a schema only declares limits with `max_length`.
 
+Pictures are a separate decision. The image shape always searches for one,
+cards that draw their own content (weather, match, figure and the rest) never
+do, and everywhere else, the profile included, the classifier's `wants_image`
+decides. A question that asks for a picture by name ("Bild von X", "show me a
+picture of X") sets it regardless, through a word match in `route.asks_to_see`,
+and asking to see something always means searching. The picture search uses
+the classifier's `image_query`, a short English caption of the subject, because
+image archives index captions. A profile or image card picks its picture with a
+model call; a prose answer shows the best-ranked result of the picture search
+without one.
+
 Between fixed layouts and prose sits the *overview*: the classifier can name up
 to three facets (facts, stats, timeline, pros and cons, list, grid, callout),
 and a panel is composed from those, every item cited on its own. Like the

@@ -2728,7 +2728,7 @@ html[data-standalone] body { overscroll-behavior-y: none; }
 .profile-gate[open] { display: grid; place-items: center; }
 .profile-gate::backdrop { background: var(--bg); }
 
-.profile-card { width: min(380px, 100%); }
+.profile-gate-card { width: min(380px, 100%); }
 .profile-title { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
 .profile-lede { margin: 6px 0 20px; font-size: 14px; line-height: 1.5; color: var(--fg-muted); }
 
