@@ -778,7 +778,7 @@ async def _second_look(ctx: RunContext, question: str, passages: list, steps: St
             :FOLLOW_UPS
         ]
         if check.sufficient or not follow_ups:
-            step.text = "The sources cover the question"
+            step.text = "Checked for gaps: the sources cover the question"
             return passages
         missing = follow_ups[0].question or follow_ups[0].query
         step.text = f"Missing: {_ellipsis(missing, 60)}. Searching again"
@@ -872,13 +872,18 @@ async def _classify(ctx: RunContext, steps: Steps, pinned: linked.Linked) -> Cla
         if result.recency and shapes.is_timeless(result.answer_shape):
             log.info("shape %r ignores the %r window", result.answer_shape, result.recency)
             result.recency = ""
-        chosen = _chosen_lenses(ctx, result)
+        _chosen_lenses(ctx, result)
         if not result.needs_search:
             step.text = "Answering directly: no search needed"
         else:
-            said = ["Understood the question"]
-            if chosen:
-                said.append(f"searching {' + '.join(lens.label for lens in ctx.lenses)}")
+            # What was decided, not that a decision was made: "understood the
+            # question" is true of every run and tells the reader nothing.
+            labels = [lens.label for lens in ctx.lenses]
+            if len(labels) > 1:
+                lenses = f"{', '.join(labels[:-1])} and {labels[-1]}"
+            else:
+                lenses = labels[0] if labels else "the web"
+            said = [f"Searching {lenses}"]
             # Said as it will actually be done: a narrow window restricts the
             # search, a year only moves recent sources up the ranking.
             if result.recency in HARD_WINDOWS:

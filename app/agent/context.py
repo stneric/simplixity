@@ -187,10 +187,14 @@ class Steps:
         await self._stream.emit_patch(self._block_id, [blocks.add_sub_step(text)])
         return index
 
-    async def _close(self, index: int, status: str, text: str | None = None) -> None:
+    async def _close(
+        self, index: int, status: str, text: str | None = None, detail: str | None = None
+    ) -> None:
         ops = [blocks.set_sub_step_status(index, status)]
         if text:
             ops.append(blocks.set_sub_step_text(index, text))
+        if detail:
+            ops.append(blocks.set_sub_step_detail(index, detail))
         await self._stream.emit_patch(self._block_id, ops)
 
     async def note(self, text: str) -> None:
@@ -209,8 +213,9 @@ class _Step:
     """`async with steps("Searching") as step:` completes or fails on exit.
 
     Assign `step.text` to replace the label with what actually happened
-    ("Searched 3 queries · 24 results"), which is more useful after the fact
-    than the intent was before it.
+    ("3 searches · 24 results"), which is more useful after the fact than the
+    intent was before it. `step.detail` is a quieter second line for what
+    supports it, such as the engines that answered.
     """
 
     def __init__(self, owner: Steps, label: str) -> None:
@@ -218,6 +223,7 @@ class _Step:
         self._label = label
         self._index = -1
         self.text: str | None = None
+        self.detail: str | None = None
 
     async def __aenter__(self) -> _Step:
         self._index = await self._owner._open(self._label)
@@ -230,7 +236,7 @@ class _Step:
         tb: TracebackType | None,
     ) -> bool:
         status = blocks.STATUS_DONE if exc is None else blocks.STATUS_FAILED
-        await self._owner._close(self._index, status, self.text)
+        await self._owner._close(self._index, status, self.text, self.detail)
         return False  # never swallow the exception
 
 

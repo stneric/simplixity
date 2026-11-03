@@ -439,7 +439,6 @@ html.boot-collapsed .app .scrim { display: none; }
   padding: 0 12px;
   flex: none;
 }
-.topbar-right { margin-left: auto; }
 
 /* Inside a project: where you are, the way out, and its model. */
 .project-bar {
@@ -557,11 +556,6 @@ html.boot-collapsed .app .scrim { display: none; }
   .project-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .project-home { padding: 4vh 14px 16px; }
 }
-
-.run-state { font-size: 12px; color: var(--fg-faint); text-transform: lowercase; }
-.run-state[data-state="live"] { color: var(--ok); }
-.run-state[data-state="reconnecting"] { color: var(--warn); }
-.run-state[data-state="idle"] { display: none; }
 
 .scroll { flex: 1; overflow-y: auto; scrollbar-gutter: stable; }
 
@@ -863,11 +857,43 @@ button.msg-file { background: none; font: inherit; font-size: 12.5px; cursor: po
   padding: 12px 14px;
   background: var(--bg-elevated);
 }
-.sub-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-.sub-step { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-faint); }
-.sub-step.done { color: var(--fg-muted); }
+.sub-steps { list-style: none; margin: 0; padding: 2px 0; display: flex; flex-direction: column; }
+.sub-step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--fg-faint);
+}
+/* The rail between two marks: a run reads as one sequence, not a bullet list. */
+.sub-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 7.5px;
+  top: 21px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--line);
+}
+.sub-step.done, .sub-step.active { color: var(--fg-muted); }
+.sub-step.active .sub-step-text { color: var(--fg); }
+.sub-step.failed { color: var(--error); }
+.sub-step-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 18px;
+}
+.sub-step.done .sub-step-mark { color: var(--fg-faint); }
+.sub-step-mark .icon-slot { display: grid; place-items: center; }
+.sub-step-body { min-width: 0; display: flex; flex-direction: column; }
+.sub-step-detail { font-size: 12px; color: var(--fg-faint); }
 .sub-step .dot {
-  width: 5px; height: 5px; flex: none;
+  width: 6px; height: 6px;
   border-radius: 999px;
   background: currentColor;
 }

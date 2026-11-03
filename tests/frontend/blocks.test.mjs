@@ -294,8 +294,8 @@ test('a portrait that actually arrived is kept', () => {
 const STEPS_RUN = {
   title: 'Researching “Wer ist Donald Trump?”',
   sub_steps: [
-    { text: 'Understood the question', status: 'done' },
-    { text: 'Searched 1 query · 6 results', status: 'done' },
+    { text: 'Searching Web', status: 'done' },
+    { text: '1 search · 6 relevant results', detail: 'Google, Bing', status: 'done' },
     { text: 'Found 6 pictures', status: 'active' },
   ],
 };
@@ -304,7 +304,9 @@ test('a running search shows its steps', () => {
   const out = renderers.research({ ...STEPS_RUN, status: 'active' });
   assert.equal(find(out, 'DETAILS').length, 0);
   assert.equal(withClass(out, 'sub-step').length, 3);
-  assert.ok(texts(out).includes('Understood the question'));
+  assert.ok(texts(out).includes('Searching Web'));
+  // The engines sit on their own quieter line, not in the sentence.
+  assert.equal(textOf(out, 'sub-step-detail'), 'Google, Bing');
 });
 
 test('a finished search folds behind one line, closed', () => {
