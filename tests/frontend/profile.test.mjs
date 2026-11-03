@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import { installDom } from './dom.mjs';
 
 installDom();
-const { slug } = await import('../../web/profile.js');
+const { slug } = await import('../../web/js/shared/profile.js');
 
 test('folds case, accents and spaces into a cookie-safe name', () => {
   assert.equal(slug('Eric'), 'eric');

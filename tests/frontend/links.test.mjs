@@ -10,8 +10,8 @@ import { test } from 'node:test';
 import { installDom, withClass } from './dom.mjs';
 
 installDom();
-const { citeLink, outbound, safeUrl } = await import('../../web/links.js');
-const { renderers } = await import('../../web/blocks.js');
+const { citeLink, outbound, safeUrl } = await import('../../web/js/render/links.js');
+const { renderers } = await import('../../web/js/render/blocks.js');
 
 test('only http and https survive the scheme check', () => {
   assert.equal(safeUrl('https://example.org/a'), 'https://example.org/a');

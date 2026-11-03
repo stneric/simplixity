@@ -268,7 +268,7 @@ if WEB_DIR.is_dir():
         # does that to favicons harder than to anything else, so a redesigned
         # icon otherwise stays the old one for days.
         return FileResponse(
-            WEB_DIR / "favicon.svg", headers={"Cache-Control": "no-cache, must-revalidate"}
+            WEB_DIR / "assets" / "favicon.svg", headers={"Cache-Control": "no-cache, must-revalidate"}
         )
 
     @app.get("/sw.js", include_in_schema=False)
@@ -297,6 +297,6 @@ if WEB_DIR.is_dir():
         # a handful of near-miss names besides. One canonical route answers the
         # only one that matters.
         return FileResponse(
-            WEB_DIR / "icons" / "apple-touch-icon.png",
+            WEB_DIR / "assets" / "icons" / "apple-touch-icon.png",
             headers={"Cache-Control": "no-cache, must-revalidate"},
         )

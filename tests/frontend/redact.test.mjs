@@ -20,7 +20,7 @@ import {
   sections,
   tally,
   validIban,
-} from '../../web/redact.js';
+} from '../../web/js/tools/redact.js';
 
 const CONTRACT = `Kaufvertrag zwischen Herrn Max Mustermann, Hauptstraße 12a, 72764 Reutlingen,
 und der Beispiel GmbH (www.beispiel-gmbh.de, info@beispiel-gmbh.de, Tel. 07121 123456).

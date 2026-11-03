@@ -6,7 +6,7 @@
 // when it is opened. `local` is shown as a badge: a tool that refuses remote
 // models should say so before anyone pastes a contract into it.
 
-import { iconNode } from './icons.js';
+import { iconNode } from '../shared/icons.js';
 
 export const TOOLS = [
   {
@@ -17,7 +17,7 @@ export const TOOLS = [
     description:
       'Find scientific papers for a question, screen their abstracts against your criteria, and export the relevant ones as BibTeX.',
     // A page of its own, not a dialog: a reading list is days of work and
-    // wants an address. See web/literature.js.
+    // wants an address. See web/js/literature/literature.js.
     open: () => location.assign('/literature'),
   },
   {

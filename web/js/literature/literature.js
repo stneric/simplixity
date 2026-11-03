@@ -19,11 +19,11 @@
 // Like the rest of the frontend, nothing here assigns innerHTML: titles and
 // abstracts come from third-party databases and go in through textContent.
 
-import { hydrate, iconNode } from './icons.js';
-import { ensureProfile } from './profile.js';
-import { confirmDialog, promptDialog } from './dialog.js';
-import { outbound } from './links.js';
-import { ModelPicker } from './picker.js';
+import { hydrate, iconNode } from '../shared/icons.js';
+import { ensureProfile } from '../shared/profile.js';
+import { confirmDialog, promptDialog } from '../shared/dialog.js';
+import { outbound } from '../render/links.js';
+import { ModelPicker } from '../shared/picker.js';
 import * as core from './literature-core.js';
 
 hydrate();

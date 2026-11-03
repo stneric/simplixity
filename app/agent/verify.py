@@ -125,7 +125,7 @@ _CITATION = re.compile(r"\[(\d{1,3})(?:~(\d+))?\]")
 # passage. Ending at any mark would cut the passage at the first word the page
 # quotes, fail the whole citation and leave it in the prose as text.
 # Single quotes are not marks: they are apostrophes in half the passages worth
-# citing. `web/markdown.js` parses the same shape.
+# citing. `web/js/render/markdown.js` parses the same shape.
 _MARKS_OPEN = '"“„«»'
 _MARKS_CLOSE = '"”“»«'
 # The next passage is set off by a comma, a semicolon or a space: a passage

@@ -1,6 +1,6 @@
 // Redact: everything between "the model found these strings" and the text that
 // is copied out. No DOM here, so all of it is testable under `node --test`; the
-// dialog that drives it is web/redact-view.js.
+// dialog that drives it is web/js/tools/redact-view.js.
 //
 // The unit is a *term*, a string to hide wherever it occurs, not a position.
 // A name the model found in excerpt 7 is just as identifying in excerpt 2 where

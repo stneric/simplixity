@@ -12,19 +12,19 @@
   "categories": ["productivity", "utilities"],
   "icons": [
     {
-      "src": "/static/icons/icon-192.png?v=3",
+      "src": "/static/assets/icons/icon-192.png?v=3",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/static/icons/icon-512.png?v=3",
+      "src": "/static/assets/icons/icon-512.png?v=3",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/static/icons/icon-maskable-512.png?v=3",
+      "src": "/static/assets/icons/icon-maskable-512.png?v=3",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -35,7 +35,7 @@
       "name": "New chat",
       "short_name": "New chat",
       "url": "/",
-      "icons": [{ "src": "/static/icons/icon-192.png?v=3", "sizes": "192x192" }]
+      "icons": [{ "src": "/static/assets/icons/icon-192.png?v=3", "sizes": "192x192" }]
     }
   ]
 }

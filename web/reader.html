@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/static/vendor/pdfjs/text_layer.css" />
   </head>
   <body>
-    <!-- The reader (web/reader.js): a cited page of one of the person's PDFs,
+    <!-- The reader (web/js/reader/reader.js): a cited page of one of the person's PDFs,
          with the passages the answer rests on highlighted. Served at
          /library/{file}/{page} for every citation; what to highlight comes in
          the fragment. Everything is built by the script, from textContent. -->
@@ -38,6 +38,6 @@
         <main class="reader-pages" id="reader-pages"></main>
       </div>
     </div>
-    <script type="module" src="/static/reader.js"></script>
+    <script type="module" src="/static/js/reader/reader.js"></script>
   </body>
 </html>

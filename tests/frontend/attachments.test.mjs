@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { accepted, filesBadge, fileSummary, newChatId, unusable, uploadError } from '../../web/attachments-core.js';
+import { accepted, filesBadge, fileSummary, newChatId, unusable, uploadError } from '../../web/js/chat/attachments-core.js';
 
 test('documents are accepted by name, photos are not', () => {
   for (const name of ['a.pdf', 'B.PDF', 'c.docx', 'd.md', 'e.markdown', 'f.txt']) assert.ok(accepted(name), name);

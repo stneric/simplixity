@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { find, installDom, tags, urls } from './dom.mjs';
 
 installDom();
-const { citedText, paperNumbers, referenceLabel, renderMarkdown } = await import('../../web/markdown.js');
+const { citedText, paperNumbers, referenceLabel, renderMarkdown } = await import('../../web/js/render/markdown.js');
 
 const SOURCES = [
   { index: 1, title: 'Redis Docs', url: 'https://redis.io/x' },
@@ -218,7 +218,7 @@ test('an ordinary table is not a key/value block', () => {
 // settles; each pass pushes the whole cycle one row down.
 
 test('a chain lays out as one node per row', async () => {
-  const { layout } = await import('../../web/diagram.js');
+  const { layout } = await import('../../web/js/render/diagram.js');
   const model = layout(
     [{ id: 'a', label: 'One' }, { id: 'b', label: 'Two' }, { id: 'c', label: 'Three' }],
     [{ from: 'a', to: 'b' }, { from: 'b', to: 'c' }],
@@ -228,7 +228,7 @@ test('a chain lays out as one node per row', async () => {
 });
 
 test('siblings share a row', async () => {
-  const { layout } = await import('../../web/diagram.js');
+  const { layout } = await import('../../web/js/render/diagram.js');
   const model = layout(
     [{ id: 'r', label: 'Root' }, { id: 'x', label: 'Left' }, { id: 'y', label: 'Right' }],
     [{ from: 'r', to: 'x' }, { from: 'r', to: 'y' }],
@@ -239,7 +239,7 @@ test('siblings share a row', async () => {
 });
 
 test('a cycle does not push the graph into a tower', async () => {
-  const { layout } = await import('../../web/diagram.js');
+  const { layout } = await import('../../web/js/render/diagram.js');
   const nodes = ['a', 'b', 'c', 'd'].map((id) => ({ id, label: id.toUpperCase() }));
   const model = layout(nodes, [
     { from: 'a', to: 'b' },
@@ -252,7 +252,7 @@ test('a cycle does not push the graph into a tower', async () => {
 });
 
 test('a back edge is drawn inside the canvas, not off its right side', async () => {
-  const { layout } = await import('../../web/diagram.js');
+  const { layout } = await import('../../web/js/render/diagram.js');
   const model = layout(
     [{ id: 'a', label: 'Start' }, { id: 'b', label: 'End' }],
     [{ from: 'a', to: 'b' }, { from: 'b', to: 'a', label: 'retry' }],
@@ -262,7 +262,7 @@ test('a back edge is drawn inside the canvas, not off its right side', async () 
 });
 
 test('a long label wraps to two lines and never more', async () => {
-  const { layout } = await import('../../web/diagram.js');
+  const { layout } = await import('../../web/js/render/diagram.js');
   const model = layout(
     [{ id: 'a', label: 'A' }, { id: 'b', label: 'An extremely long label that will not fit' }],
     [{ from: 'a', to: 'b' }],

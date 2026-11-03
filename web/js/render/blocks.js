@@ -5,7 +5,7 @@
 // has selected, plus every open <details>. So the view keeps a node per block
 // id and re-renders only the ones whose data actually changed.
 
-import { iconNode } from './icons.js';
+import { iconNode } from '../shared/icons.js';
 import { citeLink, outbound, safeUrl, sourceUrl } from './links.js';
 import { citedText, paperNumbers, renderMarkdown } from './markdown.js';
 import { renderDiagram } from './diagram.js';

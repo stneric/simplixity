@@ -96,11 +96,11 @@ button:disabled { opacity: 0.4; cursor: default; }
 /* The state the page loads in is a fact, not a movement. Only once the shell
    has said it is ready does the sidebar animate, so the drawer no longer flies
    shut across the screen on every load. `.ready` lands a frame after the class
-   above (web/sidebar.js), which is long enough to keep the two apart. */
+   above (web/js/app/sidebar.js), which is long enough to keep the two apart. */
 .app.ready .sidebar { transition: margin-left 0.18s ease; }
 
-/* The same answer, one script earlier: web/boot.js puts this on <html> before
-   the first paint, and web/sidebar.js takes it off in the frame it applies the
+/* The same answer, one script earlier: web/js/app/boot.js puts this on <html> before
+   the first paint, and web/js/app/sidebar.js takes it off in the frame it applies the
    real state. Nothing else may hang off it.
 
    `.app` is in both selectors only for the weight it carries: the narrow-screen
@@ -636,7 +636,7 @@ html.boot-collapsed .app .scrim { display: none; }
 }
 .chip[data-depth="balanced"] { color: var(--fg); }
 .chats-toggle[hidden] { display: none; }
-/* Attaching files (web/attachments.js): a round paperclip, then one chip per
+/* Attaching files (web/js/chat/attachments.js): a round paperclip, then one chip per
    file above the text, saying how much of it there is to search. */
 .attach-btn { width: 32px; padding: 0; justify-content: center; }
 .composer.dropping { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg-input)); }
@@ -1293,7 +1293,7 @@ details[open] .source-card {
   font-size: 0.88em;
 }
 
-/* Math, typeset by web/tex.js. A real TeX font would violate the CSP, so the
+/* Math, typeset by web/js/render/tex.js. A real TeX font would violate the CSP, so the
    system serif in italics carries the math look; sub/sup do the layout. */
 .tex {
   font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", Georgia, serif;
@@ -1490,7 +1490,7 @@ details[open] .source-card {
 
 /* ── the tray ──────────────────────────────────────────────────────
    Under each answer, one row of icons for everything that is about the answer
-   rather than part of it (web/blocks.js, `TRAY`). The line each block used to
+   rather than part of it (web/js/render/blocks.js, `TRAY`). The line each block used to
    print is its tooltip; a click opens the block itself under the row. */
 .turn-tray { margin-top: 2px; }
 .turn-tray[hidden] { display: none; }
@@ -1813,7 +1813,7 @@ details[open] .source-card {
 .weather-low { color: var(--fg-faint); }
 .weather-precip { font-size: 10.5px; color: var(--fg-faint); }
 
-/* Diagram: drawn by web/diagram.js, styled here so it follows the theme. */
+/* Diagram: drawn by web/js/render/diagram.js, styled here so it follows the theme. */
 .diagram-title { font-size: 13px; font-weight: 500; color: var(--fg-muted); margin-bottom: 10px; }
 .diagram-frame { overflow-x: auto; display: flex; justify-content: center; }
 .diagram-svg { display: block; }
@@ -2453,7 +2453,7 @@ details[open] .source-card {
 .save-state.error { color: var(--error); }
 
 /* ── keycaps and tooltips ────────────────────────────────────────── */
-/* Both are printed from the same table the matcher reads (web/shortcuts.js),
+/* Both are printed from the same table the matcher reads (web/js/shared/shortcuts.js),
    and both start hidden: a keycap is a promise about a keyboard, and on a phone
    there is none to press. `hover: hover and pointer: fine` is the closest thing
    the platform offers to "has a keyboard", and it is the right shape of wrong,
@@ -2538,7 +2538,7 @@ details[open] .source-card {
 
 /* ── confirm and prompt dialogs ──────────────────────────────────── */
 /* Native <dialog>, so the backdrop, focus trap and Escape come from the
-   platform and only the surface is ours. See web/dialog.js. */
+   platform and only the surface is ours. See web/js/shared/dialog.js. */
 
 .confirm {
   width: min(400px, calc(100vw - 32px));
@@ -2833,7 +2833,7 @@ html[data-standalone] body { overscroll-behavior-y: none; }
 
 /* ── tools ───────────────────────────────────────────────────────── */
 /* The menu is a .confirm dialog with a list in it; each tool brings its own,
-   larger dialog. See web/tools.js. */
+   larger dialog. See web/js/tools/tools.js. */
 
 .tool-options { display: grid; gap: 6px; margin-top: 14px; }
 .tool-option {
@@ -2957,7 +2957,7 @@ html[data-standalone] body { overscroll-behavior-y: none; }
 }
 
 /* The part the model is reading now, and the log of the parts it has read: see
-   the progress step in web/redact-view.js for why both exist. */
+   the progress step in web/js/tools/redact-view.js for why both exist. */
 .redact-current {
   display: grid;
   gap: 4px;
@@ -3140,7 +3140,7 @@ html[data-standalone] body { overscroll-behavior-y: none; }
 .redact-output > .hint { margin: 0; }
 .redact-output > .hint[hidden] { display: none; }
 
-/* The original text, never the output: see web/redact-view.js. Wrapped as the
+/* The original text, never the output: see web/js/tools/redact-view.js. Wrapped as the
    document was, so a contract's layout survives. */
 .redact-doc {
   overflow: auto;

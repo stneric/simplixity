@@ -15,7 +15,7 @@ The work is split so that a small model with a 4k window can do it:
   the text would be harmless to redact but would teach the reviewer to stop
   trusting the list.
 * Placing the spans, numbering the placeholders and the regex detectors live in
-  the browser (`web/redact.js`), because that is where the person reviewing
+  the browser (`web/js/tools/redact.js`), because that is where the person reviewing
   them toggles, adds and copies, and a round-trip per click would be absurd.
 
 The server is stateless across calls. The browser drives the excerpts

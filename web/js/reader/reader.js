@@ -22,9 +22,9 @@
 // which is exactly the text its citations were checked against, one span per
 // word so a cited passage is marked to the word.
 
-import * as pdfjs from './vendor/pdfjs/pdf.min.mjs';
-import { hydrate } from './icons.js';
-import { ensureProfile } from './profile.js';
+import * as pdfjs from '../../vendor/pdfjs/pdf.min.mjs';
+import { hydrate } from '../shared/icons.js';
+import { ensureProfile } from '../shared/profile.js';
 import { locate, parseHash } from './reader-core.js';
 
 hydrate();

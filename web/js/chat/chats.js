@@ -3,10 +3,10 @@
 // Search is server-side (it looks inside message text, not just titles), so the
 // input is debounced rather than filtering a local array.
 
-import { icon } from './icons.js';
-import { confirmDialog } from './dialog.js';
-import { CHAT_MIME, DELETE_KEYS, projectPicker } from './projects.js';
-import { label } from './shortcuts.js';
+import { icon } from '../shared/icons.js';
+import { confirmDialog } from '../shared/dialog.js';
+import { CHAT_MIME, DELETE_KEYS, projectPicker } from '../projects/projects.js';
+import { label } from '../shared/shortcuts.js';
 
 const DEBOUNCE_MS = 250;
 

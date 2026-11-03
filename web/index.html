@@ -30,7 +30,7 @@
          home-screen icon from apple-touch-icon.png and the manifest, and those
          otherwise keep the old artwork long after the tab has updated.
          One number for all of them: bump it here and in manifest.webmanifest
-         together whenever web/icon.svg is re-rendered.
+         together whenever web/assets/icon.svg is re-rendered.
          An icon already sitting on a home screen is never refetched, so that
          one still has to be removed and re-added. -->
     <link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml" />
@@ -45,8 +45,8 @@
     <link rel="stylesheet" href="/static/styles.css" />
 
     <!-- Deliberately blocking, and deliberately not a module: it settles whether
-         the sidebar starts open before anything is drawn. See web/boot.js. -->
-    <script src="/static/boot.js"></script>
+         the sidebar starts open before anything is drawn. See web/js/app/boot.js. -->
+    <script src="/static/js/app/boot.js"></script>
   </head>
   <body>
     <div class="app" id="app">
@@ -68,12 +68,12 @@
         <nav class="chat-list" id="chat-list" aria-label="Chat history"></nav>
 
         <div class="sidebar-foot">
-          <!-- Whose chats these are. A name, not an account: see web/profile.js. -->
+          <!-- Whose chats these are. A name, not an account: see web/js/shared/profile.js. -->
           <button class="sidebar-item" id="switch-profile">
             <i data-icon="user" data-size="16"></i>
             <span id="profile-name">Profile</span>
           </button>
-          <!-- Single-purpose jobs beside the chat, see web/tools.js. -->
+          <!-- Single-purpose jobs beside the chat, see web/js/tools/tools.js. -->
           <button class="sidebar-item" id="open-tools">
             <i data-icon="wrench" data-size="16"></i>
             <span>Tools</span>
@@ -101,7 +101,7 @@
             <i data-icon="plus"></i>
           </button>
           <!-- Inside a project only: where you are, the way out, and the model
-               that writes its answers (web/project-view.js). An ordinary chat
+               that writes its answers (web/js/projects/project-view.js). An ordinary chat
                keeps the topbar empty; its model lives in Settings, which is
                where it is set once and left. -->
           <div class="project-bar" id="project-bar" hidden></div>
@@ -130,7 +130,7 @@
                saying so is a state with no visible cause. -->
           <p class="project-badge" id="project-badge" hidden></p>
           <form class="composer" id="composer" autocomplete="off">
-            <!-- Files attached to this chat (web/attachments.js). With any, the
+            <!-- Files attached to this chat (web/js/chat/attachments.js). With any, the
                  chat answers from them, as a literature project from its papers. -->
             <ul class="attachments" id="attachments" aria-label="Attached files" hidden></ul>
             <textarea
@@ -350,6 +350,6 @@
       </div>
     </div>
 
-    <script type="module" src="/static/app.js"></script>
+    <script type="module" src="/static/js/app/app.js"></script>
   </body>
 </html>

@@ -21,8 +21,8 @@
 // Like the markdown renderer, nothing here assigns innerHTML: the document is
 // untrusted text and goes in through textContent only.
 
-import { iconNode } from './icons.js';
-import { confirmDialog } from './dialog.js';
+import { iconNode } from '../shared/icons.js';
+import { confirmDialog } from '../shared/dialog.js';
 import {
   KINDS,
   clock,
@@ -100,7 +100,7 @@ const isField = (node) => node?.closest?.('input, textarea, select, [contentedit
 
 /**
  * Open the tool.
- * @param {{settings: import('./settings.js').Settings}} ctx
+ * @param {{settings: import('../app/settings.js').Settings}} ctx
  */
 export function openRedact({ settings }) {
   const state = {

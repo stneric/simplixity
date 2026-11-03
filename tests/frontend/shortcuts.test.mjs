@@ -18,11 +18,11 @@ const platform = (value) =>
 
 installDom();
 platform('MacIntel');
-const mac = await import('../../web/shortcuts.js');
+const mac = await import('../../web/js/shared/shortcuts.js');
 platform('Win32');
 // A query string is what buys a second instance of a module that reads the
 // platform once, at import.
-const pc = await import('../../web/shortcuts.js?platform=win');
+const pc = await import('../../web/js/shared/shortcuts.js?platform=win');
 
 /** A keydown with nothing held, overridden by whatever the case is about. */
 const press = (over) => ({

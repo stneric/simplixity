@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { filesByMessage, modelLabel, stamp } from '../../web/turns-core.js';
+import { filesByMessage, modelLabel, stamp } from '../../web/js/chat/turns-core.js';
 
 test('today shows the hour, an older message the date too', () => {
   const now = new Date(2026, 9, 8, 15, 0);

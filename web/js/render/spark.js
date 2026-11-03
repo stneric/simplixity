@@ -1,6 +1,6 @@
 // Sparklines: a line over a series, with no axes and no grid.
 //
-// Same split as web/diagram.js, for the same reason. `sparkline()` is a pure
+// Same split as web/js/render/diagram.js, for the same reason. `sparkline()` is a pure
 // function from numbers to path data (no DOM, so it can be tested with
 // `node --test` and no browser), and `renderSparkline()` builds the SVG from
 // it with createElementNS. No innerHTML anywhere near a value.

@@ -14,7 +14,7 @@
 // and every later question answers from them, so `count` keeps them: the
 // composer stays set up for files, only the chips are gone.
 
-import { iconNode } from './icons.js';
+import { iconNode } from '../shared/icons.js';
 import { fileSummary, newChatId, unusable, uploadError } from './attachments-core.js';
 
 export class Attachments {

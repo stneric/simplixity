@@ -18,9 +18,9 @@
 // screen is to the app: what this place is, what it holds, and the way into
 // its reading lists.
 
-import { iconNode } from './icons.js';
-import { ModelPicker } from './picker.js';
-import { isLibrary } from './source-switch.js';
+import { iconNode } from '../shared/icons.js';
+import { ModelPicker } from '../shared/picker.js';
+import { isLibrary } from '../chat/source-switch.js';
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -48,7 +48,7 @@ export class ProjectBar {
    * @param {object} hooks
    * @param {() => void} hooks.onHome   the project's name was clicked
    * @param {() => void} hooks.onLeave  the close button was clicked
-   * @param {import('./settings.js').Settings} hooks.settings
+   * @param {import('../app/settings.js').Settings} hooks.settings
    */
   constructor(root, { onHome, onLeave, settings }) {
     this.root = root;

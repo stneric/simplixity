@@ -15,7 +15,7 @@ import { test } from 'node:test';
 import { installDom, find } from './dom.mjs';
 
 installDom();
-const { sparkline, parseNumber, renderSparkline } = await import('../../web/spark.js');
+const { sparkline, parseNumber, renderSparkline } = await import('../../web/js/render/spark.js');
 
 const OPTS = { width: 100, height: 50, padding: 0 };
 

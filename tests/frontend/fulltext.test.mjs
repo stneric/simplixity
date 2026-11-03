@@ -5,8 +5,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { assignChoices, fileLine, fulltextOverview, matchLabel, warningText } from '../../web/literature-core.js';
-import { isLibrary, libraryBadge } from '../../web/source-switch.js';
+import { assignChoices, fileLine, fulltextOverview, matchLabel, warningText } from '../../web/js/literature/literature-core.js';
+import { isLibrary, libraryBadge } from '../../web/js/chat/source-switch.js';
 
 const papers = [
   { id: 1, decision: 'relevant', data: { title: 'A' } },

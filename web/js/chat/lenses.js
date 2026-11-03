@@ -9,7 +9,7 @@
 // nothing and then blames the model for the empty answer, so clicking the last
 // remaining lens is a no-op rather than a way to break the app.
 
-import { icon } from './icons.js';
+import { icon } from '../shared/icons.js';
 
 const ICONS = {
   auto: 'spark',

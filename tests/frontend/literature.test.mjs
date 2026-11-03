@@ -19,7 +19,7 @@ import {
   sourceLine,
   tally,
   visible,
-} from '../../web/literature-core.js';
+} from '../../web/js/literature/literature-core.js';
 
 const papers = [
   { id: 1, decision: '', summary: null },

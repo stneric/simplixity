@@ -4,10 +4,10 @@
 //
 // Writes are debounced and last-write-wins.
 
-import { ModelPicker } from './picker.js';
-import { iconNode } from './icons.js';
-import { loadDepths } from './depth.js';
-import { loadLenses } from './lenses.js';
+import { ModelPicker } from '../shared/picker.js';
+import { iconNode } from '../shared/icons.js';
+import { loadDepths } from '../chat/depth.js';
+import { loadLenses } from '../chat/lenses.js';
 
 const DEBOUNCE_MS = 400;
 

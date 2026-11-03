@@ -19,7 +19,7 @@ import { test } from 'node:test';
 import { find, installDom, tags, textOf, urls, withClass } from './dom.mjs';
 
 installDom();
-const { BlockView, renderers } = await import('../../web/blocks.js');
+const { BlockView, renderers } = await import('../../web/js/render/blocks.js');
 
 const SOURCES = [
   { index: 1, title: 'Wikipedia', url: 'https://en.wikipedia.org/x', domain: 'en.wikipedia.org' },

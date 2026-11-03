@@ -7,7 +7,7 @@
 // that lasts until the first new source type. One helper, one check.
 
 import { attachPreview } from './preview.js';
-import { sourceHash } from './reader-core.js';
+import { sourceHash } from '../reader/reader-core.js';
 
 /** The URL if it is http(s), resolved against this page, else null. The
  *  project's own chats are linked as `/#chat=…`, which resolves to this origin
@@ -38,7 +38,7 @@ export function outbound(url, className) {
 
 /** Where a source opens. A page of the person's papers opens the reader on
  *  that page, carrying the passages to highlight in the fragment
- *  (web/reader.js); everything else opens where it lives. */
+ *  (web/js/reader/reader.js); everything else opens where it lives. */
 export function sourceUrl(source, quotes = []) {
   const url = source?.url ?? '';
   return url.startsWith('/library/') ? url + sourceHash(source, quotes) : url;

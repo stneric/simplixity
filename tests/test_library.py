@@ -476,7 +476,7 @@ async def test_the_library_finds_the_page_and_cites_it(db, offline_embed):
     assert "Secure aggregation" in top.content
     assert top.tier == "academic" and top.engine == "library"
     assert base.canonical_url(top.url) == top.url
-    # How the prose names it, "[Byline, S. 2]" (web/markdown.js).
+    # How the prose names it, "[Byline, S. 2]" (web/js/render/markdown.js).
     assert top.as_source(1)["byline"] == "Federated Learning for Smart Grid… 2020"
 
 

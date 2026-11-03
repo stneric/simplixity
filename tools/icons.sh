@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate the PWA raster icons from web/icon.svg.
+# Regenerate the PWA raster icons from web/assets/icon.svg.
 #
 # Checked-in output, not a build step: the app ships as static files with no
 # bundler, and adding a toolchain for four PNGs that change once a year would be
@@ -9,8 +9,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-src="web/icon.svg"
-out="web/icons"
+src="web/assets/icon.svg"
+out="web/assets/icons"
 mkdir -p "$out"
 
 render() { rsvg-convert -w "$1" -h "$1" "$src" -o "$2"; echo "  $2 (${1}px)"; }
