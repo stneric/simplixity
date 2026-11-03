@@ -395,6 +395,7 @@ async def register_images(
             return 0
         ctx.sources.allow_extra(len(pictures))
         registered = await ctx.sources.add(pictures)
+        ctx.pictures.extend(index for index, _result in registered)
         step.text = f"Found {_plural(len(registered), 'picture')}"
         return len(registered)
 

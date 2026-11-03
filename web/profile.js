@@ -91,7 +91,7 @@ function pick(profiles) {
     // div would not. Escape is swallowed: there is no page to go back to.
     const gate = el('dialog', 'profile-gate');
     gate.addEventListener('cancel', (event) => event.preventDefault());
-    const card = el('div', 'profile-card');
+    const card = el('div', 'profile-gate-card');
     gate.append(card);
 
     const done = (result) => {
