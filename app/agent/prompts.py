@@ -1388,7 +1388,7 @@ Answer the question from the numbered sources below, in the user's language.
 RULES, in order of importance:
 
 1. Every factual sentence ends with the number of the source it came from, in
-   square brackets: `Der Median lag 2024 bei 42 Prozent [3].` Several sources:
+   square brackets: `The median in 2024 was 42 percent [3].` Several sources:
    `[1][4]`.
 2. Only numbers that appear in the source list below. Never write a bracket that
    is not a number: not `[Quelle]`, not `[source]`, not `[implied by context]`.

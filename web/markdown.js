@@ -497,25 +497,24 @@ function citation(number, sources, quotes = [], direct = false) {
 //
 // "S." or "p.", "vgl." or "cf.": the answer's language decides, not the
 // browser's. A German answer read in an English browser printed "cf. … p. 5"
-// into a German sentence. Set per render (`renderMarkdown`, `citedText`);
-// the browser's language is only the fallback for text too short to tell.
-const BROWSER_GERMAN = /^de\b/i.test(globalThis.navigator?.language ?? '');
-let GERMAN = BROWSER_GERMAN;
-let MARKS = ['„', '“'];
+// into a German sentence. Set per render (`renderMarkdown`, `citedText`).
+// Text too short to tell is treated as English, like the rest of the interface.
+let GERMAN = false;
+let MARKS = ['"', '"'];
 
 /** Whether a text is German, by its commonest short words. */
 export function isGerman(text) {
   const words = String(text ?? '').toLowerCase().match(/\p{L}+/gu) ?? [];
-  if (words.length < 8) return BROWSER_GERMAN;
+  if (words.length < 8) return false;
   const de = new Set(['und', 'der', 'die', 'das', 'nicht', 'ist', 'mit', 'von', 'sie', 'den', 'ein', 'eine', 'auf', 'für', 'auch', 'sich', 'dass', 'wird', 'werden', 'zu']);
   const en = new Set(['the', 'and', 'of', 'to', 'is', 'that', 'with', 'for', 'are', 'this', 'it', 'as', 'by', 'on', 'they', 'an', 'be', 'not', 'from', 'their']);
   const score = words.reduce((n, w) => n + (de.has(w) ? 1 : en.has(w) ? -1 : 0), 0);
-  return score === 0 ? BROWSER_GERMAN : score > 0;
+  return score > 0;
 }
 
 function setLanguage(text) {
   GERMAN = isGerman(text);
-  MARKS = GERMAN ? ['„', '“'] : ['“', '”'];
+  MARKS = GERMAN ? ['„', '"'] : ['"', '"'];
 }
 
 // A source's title ends in where on its document it is; without that, the

@@ -354,6 +354,7 @@ export function openRedact({ settings }) {
 
   const describeSource = () => {
     const n = source.value.length;
+    // let locale be decided by the browser, not the server.
     sourceInfo.textContent = n ? `${n.toLocaleString()} characters` : '';
   };
   source.addEventListener('input', describeSource);

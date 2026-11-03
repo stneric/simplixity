@@ -2,7 +2,7 @@
 // model wrote the answer, and which attached files went out with a question.
 // No DOM, so `node --test` checks it, the same split as attachments-core.js.
 
-/** A time in the browser's own zone and language: the hour alone for today,
+/** A time in the browser's own zone, written in the browser's own locale: the hour alone for today,
  *  the date as well for anything older. `title` is the full moment, for the
  *  tooltip. Empty for a missing or unreadable time, which stored messages from
  *  before it was recorded have. */
