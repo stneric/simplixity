@@ -1,6 +1,6 @@
 [project]
 name = "simplixity"
-version = "0.1.0"
+version = "0.1.1"
 description = "Self-hosted research assistant that answers with checked citations"
 readme = "README.md"
 license = "AGPL-3.0-or-later"
