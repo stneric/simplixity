@@ -190,6 +190,15 @@ the app already sends `X-Accel-Buffering: no`.
 The container starts as root only to fix the ownership of a bind-mounted
 `/data` and then drops to uid 1000 before starting Python.
 
+### On your phone
+
+Once the app is reachable over HTTPS, it can be installed as an app on a
+phone. Open it in the browser and choose "Add to Home Screen" (Safari's share
+menu, or Chrome's menu on Android). It then opens full screen from its own
+icon, without the browser's address bar.
+
+<img src="docs/ui-demo/phone-pwa.png" width="300" alt="Simplixity installed on a phone: the start screen with suggested questions and the input with the lens and depth menus, running full screen without a browser bar">
+
 ## Research depth
 
 ![The depth menu: Auto, Quick, Balanced and Deep, each with what it does](docs/ui-demo/search-type.png)
