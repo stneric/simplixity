@@ -5,6 +5,7 @@
 // Writes are debounced and last-write-wins.
 
 import { ModelPicker } from './picker.js';
+import { iconNode } from './icons.js';
 import { loadDepths } from './depth.js';
 import { loadLenses } from './lenses.js';
 
@@ -159,6 +160,7 @@ export class Settings {
 
         const mark = document.createElement('span');
         mark.className = 'lens-toggle-mark';
+        mark.append(iconNode('check', 14));
 
         row.append(text, mark);
         row.addEventListener('click', () => {

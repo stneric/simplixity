@@ -1621,31 +1621,38 @@ details[open] .source-card {
   color: var(--fg-faint);
 }
 
-/* The same toggles inside the settings modal, with room to be read. */
-.lens-settings { display: flex; flex-direction: column; gap: 4px; }
+/* The same toggles inside the settings modal: one list with hairlines between
+   rows, like the project page's lists, and a check where a box was. */
+.lens-settings {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
 .lens-toggle {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 9px 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  padding: 10px 12px;
   text-align: left;
+  transition: background 120ms ease;
 }
+.lens-toggle + .lens-toggle { border-top: 1px solid var(--line); }
 .lens-toggle:hover { background: var(--bg-hover); }
-.lens-toggle.on { border-color: var(--fg-muted); background: var(--bg-input); }
-.lens-toggle-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.lens-toggle-label { font-size: 13.5px; font-weight: 500; color: var(--fg); }
-.lens-toggle-desc { font-size: 12px; color: var(--fg-faint); line-height: 1.45; }
+.lens-toggle:focus-visible { outline: 2px solid var(--fg); outline-offset: -2px; }
+.lens-toggle-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.lens-toggle-label { font-size: 14px; color: var(--fg); }
+.lens-toggle-desc { font-size: 12.5px; color: var(--fg-muted); line-height: 1.45; }
 .lens-toggle-mark {
   flex: none;
-  width: 16px; height: 16px;
+  display: inline-flex;
   margin-left: auto;
-  border: 1.5px solid var(--line-strong);
-  border-radius: 5px;
+  color: var(--fg);
+  visibility: hidden;
 }
-.lens-toggle.on .lens-toggle-mark { background: var(--accent); border-color: var(--accent); }
+.lens-toggle.on .lens-toggle-mark { visibility: visible; }
 
 /* ── widgets ─────────────────────────────────────────────────────── */
 /* Built from a validated schema, so the layout can be committed to: every
@@ -2256,6 +2263,8 @@ details[open] .source-card {
 .picker-problems { border-top: 1px solid var(--line); text-align: left; }
 
 /* ── modal ───────────────────────────────────────────────────────── */
+/* The settings surface, drawn like the .confirm dialogs it sits beside: the
+   same blurred backdrop, no rules across the head or foot, one padding. */
 
 .overlay {
   position: fixed;
@@ -2263,89 +2272,93 @@ details[open] .source-card {
   z-index: 60;
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding: 16px;
   background: rgb(0 0 0 / 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 .overlay[hidden] { display: none; }
 
 .modal {
-  width: min(560px, 100%);
-  max-height: 86vh;
+  width: min(600px, 100%);
+  height: min(720px, calc(100svh - 32px));
   display: flex;
   flex-direction: column;
   background: var(--bg-elevated);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow);
+  overflow: hidden;
+  animation: confirm-in 130ms ease-out;
 }
 
 .modal-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
+  gap: 10px;
+  padding: 16px 14px 0 24px;
 }
-.modal-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.modal-head h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.45; }
+.modal-head .save-state { margin-left: auto; }
 
-.modal-body { padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 22px; }
+.modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 24px 24px;
+  overflow-y: auto;
+}
 
 /* ── settings tabs ───────────────────────────────────────────────── */
-/* The modal grew past the point where one scroll held it: three model
-   pickers, two toggles, a select, a text field and the corpus list read as a
-   pile rather than as decisions with somewhere to belong. */
+/* A segmented control rather than underlined tabs: three short words, and the
+   same pill-in-a-well the composer's switches use. */
 
 .tabstrip {
   display: flex;
   gap: 2px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--line);
+  margin: 14px 24px 8px;
+  padding: 3px;
+  background: var(--bg-input);
+  border-radius: var(--r-md);
 }
 .tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 12px;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--fg-faint);
-  font: inherit;
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  color: var(--fg-muted);
   font-size: 13px;
-  cursor: pointer;
-  /* The strip must not shift when the label goes semibold on selection. */
-  transition: color 0.12s ease, border-color 0.12s ease;
+  font-weight: 500;
+  transition: color 0.12s ease, background 0.12s ease;
 }
-.tab:hover { color: var(--fg-muted); }
+.tab:hover { color: var(--fg); }
 .tab[aria-selected='true'] {
   color: var(--fg);
-  border-bottom-color: var(--fg);
-  font-weight: 500;
+  background: var(--bg-elevated);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+/* On dark the well is lighter than the modal, so the pill steps up, not down. */
+@media (prefers-color-scheme: dark) {
+  .tab[aria-selected='true'] { background: var(--bg-active); box-shadow: none; }
 }
 .tab:focus-visible { outline: 2px solid var(--fg); outline-offset: -2px; }
-.tab .icon-slot { opacity: 0.75; }
-.tab[aria-selected='true'] .icon-slot { opacity: 1; }
 
-.tab-panel { display: flex; flex-direction: column; gap: 22px; }
+.tab-panel { display: flex; flex-direction: column; }
 .tab-panel[hidden] { display: none; }
+
+/* One setting per section, divided by hairlines: a list of decisions, not a
+   stack of boxes. */
+.modal .field { padding: 18px 0; }
+.modal .field + .field { border-top: 1px solid var(--line); }
+.modal .field:last-child { padding-bottom: 4px; }
 
 .field-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
+  min-height: 24px;
+  margin-bottom: 10px;
 }
-.field-head label { font-size: 13px; font-weight: 500; }
-/* The icon rides with the words rather than in a column of its own: a settings
-   modal is read down the labels, and an icon gutter makes every label start
-   further right for no gain. */
-.field-head > label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-.field-head > label .icon-slot { color: var(--fg-faint); }
+.field-head > label { font-size: 14px; font-weight: 500; color: var(--fg); }
 
 .ghost-btn {
   display: inline-flex;
@@ -2359,6 +2372,8 @@ details[open] .source-card {
 .ghost-btn:hover { background: var(--bg-hover); color: var(--fg); }
 
 .hint { margin: 8px 0 0; font-size: 12px; color: var(--fg-faint); line-height: 1.5; }
+.modal .hint { margin-top: 10px; font-size: 12.5px; color: var(--fg-muted); line-height: 1.55; }
+.modal .hint strong { color: var(--fg); font-weight: 500; }
 
 .select,
 .text-input {
@@ -2374,6 +2389,32 @@ details[open] .source-card {
 .text-input:focus-visible { outline: none; border-color: var(--line-strong); }
 .text-input::placeholder { color: var(--fg-faint); }
 
+/* The native select, dressed as the model pickers above it: same border,
+   radius and caret, so the two read as one kind of control. */
+.select-wrap { position: relative; }
+.select-wrap::after {
+  content: '▾';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--fg-faint);
+  pointer-events: none;
+}
+.select-wrap .select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 6px 30px 6px 9px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+.modal .select:hover,
+.modal .text-input:hover { border-color: var(--line-strong); }
+.modal .select:focus-visible,
+.modal .text-input:focus-visible { outline: none; border-color: var(--fg-muted); }
+.modal .text-input { padding: 6px 9px; }
+
 .switch { position: relative; display: inline-flex; }
 /* A bare switch says nothing about which way is on. The caption is not
    decoration: it says what "on" means. */
@@ -2387,29 +2428,27 @@ details[open] .source-card {
 }
 .switch.labelled:has(input:checked) .switch-text { color: var(--fg-muted); }
 .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+/* Monochrome, like every other on-state in the app: colour is kept for claims
+   about a source, not for chrome. */
 .track {
-  width: 34px; height: 20px;
+  width: 30px; height: 18px;
   padding: 2px;
-  background: var(--bg-active);
+  background: var(--line-strong);
   border-radius: 999px;
   transition: background 0.15s ease;
 }
 .thumb {
   display: block;
-  width: 16px; height: 16px;
-  background: var(--bg);
+  width: 14px; height: 14px;
+  background: #ffffff;
   border-radius: 999px;
-  transition: transform 0.15s ease;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  transition: transform 0.15s ease, background 0.15s ease;
 }
-.switch input:checked + .track { background: var(--ok); }
-.switch input:checked + .track .thumb { transform: translateX(14px); }
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track .thumb { transform: translateX(12px); background: var(--accent-fg); }
 .switch input:focus-visible + .track { outline: 2px solid var(--fg); outline-offset: 2px; }
 
-.modal-foot {
-  padding: 10px 16px;
-  border-top: 1px solid var(--line);
-  min-height: 40px;
-}
 .save-state { font-size: 12px; color: var(--fg-faint); }
 .save-state.error { color: var(--error); }
 
