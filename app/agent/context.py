@@ -283,6 +283,11 @@ class RunContext:
     # Accumulated across every search the run makes, so the footer can report
     # which engines the answer actually rests on.
     search_report: SearchReport = field(default_factory=SearchReport)
+    # Citation numbers of what the picture search found, in its own order. Kept
+    # apart from the evidence because a web page may carry a thumbnail too, and
+    # the picture shown beside a prose answer has to be one searched *as* a
+    # picture of the subject, not the banner of whichever page ranked first.
+    pictures: list[int] = field(default_factory=list)
     history: list[Message] = field(default_factory=list)
     embedding_model: str | None = None
     embedding_provider: str = "openrouter"

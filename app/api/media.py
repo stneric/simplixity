@@ -111,8 +111,51 @@ async def image(url: str = Query(max_length=2000)) -> Response:
     if not _fetchable(target):
         return _blank()
 
-    body, content_type = await _get_typed(target, MAX_IMAGE_BYTES)
-    return _image(body, content_type) if body else _blank()
+    for candidate in (_commons_thumbnail(target), target):
+        if not candidate:
+            continue
+        body, content_type = await _get_typed(candidate, MAX_IMAGE_BYTES)
+        if body:
+            return _image(body, content_type)
+    return _blank()
+
+
+# Wikimedia renders thumbnails only at fixed widths and answers 400 to any
+# other; 960 is one of them, and wide enough for every card in the app.
+COMMONS_THUMB_WIDTH = 960
+_COMMONS_HOST = "upload.wikimedia.org"
+# Formats whose thumbnail keeps the original's name. An SVG's is rendered to
+# PNG and gets ".png" appended; a TIFF or a PDF page has a naming scheme of
+# its own and is left to the original.
+_COMMONS_RASTER = (".jpg", ".jpeg", ".png", ".gif", ".webp")
+
+
+def _commons_thumbnail(url: str) -> str:
+    """The Commons thumbnail for an original file, or "" when there is none.
+
+    Search engines hand over the original upload, and a portrait on Commons is
+    routinely a 6 MB photograph: over the size cap, so the proxy answered with
+    its blank pixel and the profile card dropped the portrait it had chosen.
+    The thumbnail is the same picture at a size a card can use, from the same
+    host, so nothing about provenance changes. The original stays the fallback.
+    """
+    parsed = urlsplit(url)
+    if (parsed.hostname or "").lower() != _COMMONS_HOST:
+        return ""
+    parts = parsed.path.split("/")
+    # /wikipedia/<project>/<a>/<ab>/<file>; a thumbnail path has "thumb" after
+    # the project and is already the light version.
+    if len(parts) != 6 or parts[1] != "wikipedia" or parts[3] == "thumb":
+        return ""
+    project, first, pair, name = parts[2], parts[3], parts[4], parts[5]
+    lower = name.lower()
+    if lower.endswith(".svg"):
+        thumb = f"{COMMONS_THUMB_WIDTH}px-{name}.png"
+    elif lower.endswith(_COMMONS_RASTER):
+        thumb = f"{COMMONS_THUMB_WIDTH}px-{name}"
+    else:
+        return ""
+    return f"https://{_COMMONS_HOST}/wikipedia/{project}/thumb/{first}/{pair}/{name}/{thumb}"
 
 
 def _fetchable(url: str) -> bool:
@@ -195,8 +238,12 @@ def _image(body: bytes, content_type: str) -> Response:
 
 
 def _blank() -> Response:
+    """The stand-in for a picture that could not be fetched. Never cached: a
+    failure may be a timeout or a limit this server has since lifted, and a
+    browser holding the blank pixel for an image URL keeps showing nothing
+    for it long after the server would answer with the picture."""
     return Response(
         content=BLANK,
         media_type="image/gif",
-        headers={"Cache-Control": "public, max-age=3600"},
+        headers={"Cache-Control": "no-store"},
     )

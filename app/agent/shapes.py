@@ -55,6 +55,10 @@ class Shape:
     # Whether the answer wants a retrieved picture. Drives the separate image
     # search; see `research.find_images` for why it is separate.
     wants_image: bool = False
+    # Whether that picture is the classifier's call rather than the shape's. A
+    # profile of a person or a brand wants one; a profile of ISO 27001 paid for
+    # an image search that came back with stock photos of padlocks.
+    image_if_asked: bool = False
     # Whether a recency window would starve this answer rather than sharpen it.
     # "Wer ist X" is a question about a person, and the classifier reads it as
     # current-events often enough that restricting to the past year leaves the
@@ -318,11 +322,12 @@ say plainly if the sources only cover part of it.""",
         id=PROFILE,
         guidance=(
             '  - "profile" for one named thing the question asks *about* and wants\n'
-            "    identified: a person, an organisation, a place, a product, a piece of\n"
-            '    software, a standard: "who is X", "what is the company Y", "was ist\n'
-            '    Z", "wer ist Z". The test is that the answer opens by saying what the\n'
-            "    thing is; a question that merely mentions it, or that asks how to use\n"
-            "    it or whether to buy it, is not a profile. Neither is a concept, a\n"
+            "    identified: a person, an organisation, a brand, a product, a place, a\n"
+            "    building, an animal or plant species, a piece of software, a standard:\n"
+            '    "who is X", "what is the company Y", "was ist Z", "wer ist Z". The\n'
+            "    test is that the answer opens by saying what the thing is; a question\n"
+            "    that merely mentions it, or that asks how to use it or whether to buy\n"
+            "    it, is not a profile. Neither is a concept, a\n"
             '    mechanism or a piece of jargon: "was ist ein Autoencoder" wants the\n'
             '    idea taught, which is "explainer", and a card of facts about an idea\n'
             "    is a card with nothing on it."
@@ -334,6 +339,7 @@ this is the answer to the question, what it is known for or used for, what has
 changed recently. Three to five sentences, cited.""",
         lenses=("reference",),
         wants_image=True,
+        image_if_asked=True,
         timeless=True,
     ),
     Shape(
@@ -576,6 +582,20 @@ def lenses_for(shape: str) -> tuple[str, ...]:
 def wants_image(shape: str) -> bool:
     entry = definition(shape)
     return bool(entry and entry.wants_image)
+
+
+def picture_for(shape: str, asked: bool) -> bool:
+    """Whether this answer runs the image search, given what the classifier said.
+
+    A shape that is always a picture gets one. A widget that draws its own card
+    (a forecast, a scoreboard) never does, whatever the classifier said: the
+    card is what the reader came to see. Everywhere else, prose included, the
+    classifier's `wants_image` decides.
+    """
+    entry = definition(shape)
+    if entry is None or not entry.widget or entry.image_if_asked:
+        return asked
+    return entry.wants_image
 
 
 def is_timeless(shape: str) -> bool:

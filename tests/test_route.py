@@ -232,12 +232,77 @@ def test_a_question_needing_no_search_is_answered_directly():
 
 def test_a_shape_that_wants_a_picture_asks_for_the_image_search():
     assert route_module.plan(
-        classification(answer_shape="profile"), depth_module.get("auto")
+        classification(answer_shape="image"), depth_module.get("auto")
     ).wants_images
     assert route_module.plan(
         classification(wants_image=True), depth_module.get("auto")
     ).wants_images
     assert not route_module.plan(classification(), depth_module.get("auto")).wants_images
+
+
+def test_a_profile_searches_for_a_picture_only_when_the_classifier_wants_one():
+    """A person or a brand is recognised by sight; ISO 27001 is not, and its
+    profile paid for an image search that came back with stock padlocks."""
+    auto = depth_module.get("auto")
+    assert not route_module.plan(classification(answer_shape="profile"), auto).wants_images
+    assert route_module.plan(
+        classification(answer_shape="profile", wants_image=True), auto
+    ).wants_images
+
+
+@pytest.mark.parametrize("shape", ["", "explainer", "table"])
+def test_prose_and_the_shapes_without_a_card_follow_the_classifier(shape):
+    auto = depth_module.get("auto")
+    wanted = classification(answer_shape=shape, wants_image=True)
+    assert route_module.plan(wanted, auto).wants_images
+    assert not route_module.plan(classification(answer_shape=shape), auto).wants_images
+
+
+def test_the_image_query_reaches_the_route_and_survives_widening():
+    auto = depth_module.get("auto")
+    route = route_module.plan(classification(wants_image=True, image_query="okapi"), auto)
+    assert route.image_query == "okapi"
+    assert route_module.widened(route, auto).image_query == "okapi"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "zeig mir ein Bild vom Eiffelturm",
+        "Zeige mir Fotos der Sixtinischen Kapelle",
+        "zeig mal bilder",
+        "Bilder von Tesla Cybertruck",
+        "show me a picture of a capybara",
+        "show me some images of okapis",
+        "photo of the new iPhone",
+    ],
+)
+def test_a_picture_asked_for_by_name_is_recognised(query):
+    assert route_module.asks_to_see(query)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        # Picture nouns inside other words.
+        "wie funktioniert Bildung in Finnland",
+        "mein Bildschirm flackert",
+        "Bildgebung beim MRT",
+        "image processing in python",
+        # A request verb without a picture.
+        "zeig mir wie man python installiert",
+        "show me how to deploy a container",
+        # Idioms the classifier reads in context, never forced here.
+        "wie sieht es mit der Inflation aus",
+        "what does a good CV look like",
+        # The same nouns for an impression.
+        "ich will mir ein Bild von der Lage machen",
+        "give me the big picture of the AI market",
+        "",
+    ],
+)
+def test_a_question_that_does_not_ask_for_a_picture_is_not_forced_to(query):
+    assert not route_module.asks_to_see(query)
 
 
 def test_a_shape_with_its_own_card_does_not_also_go_looking_for_a_picture():

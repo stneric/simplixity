@@ -922,6 +922,27 @@ async def _best_picture(ctx: RunContext, why: str = "the widget card was lost") 
     return False
 
 
+async def show_picture(ctx: RunContext) -> bool:
+    """The picture beside a prose answer the classifier said wants one.
+
+    Prose has no card to carry it, and without this the image search runs,
+    registers its results and shows nothing: "Found 4 pictures" in the
+    transcript above an answer without any. The best-ranked result of the picture search is
+    shown, with no model call: the search was for this subject by name and has
+    already been filtered for relevance, and a call to choose between its
+    results is a cost the reader of a prose answer did not ask for. Only results of that search are
+    eligible, never a thumbnail some evidence page happened to carry.
+    """
+    by_index = dict(ctx.sources.all())
+    for index in ctx.pictures:
+        result = by_index.get(index)
+        if result is None or not result.image:
+            continue
+        await ctx.stream.emit_block(blocks.block(shapes.IMAGE, picture_payload(index, result)))
+        return True
+    return False
+
+
 def _messages(
     ctx: RunContext, shape: str, instructions: str, question: str, passages: list[Passage]
 ) -> list[dict[str, Any]] | None:

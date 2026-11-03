@@ -58,6 +58,9 @@ class Route:
     depth: Depth
     shape: str = shapes.PROSE
     wants_images: bool = False
+    # What the image search looks for, when the classifier wrote it. Empty
+    # falls back to the first web query.
+    image_query: str = ""
     place: str = ""
     reason: str = ""
     # The overview's building blocks, set only when `shape` is the overview.
@@ -118,19 +121,18 @@ def plan(classification, requested: Depth) -> Route:
         mode = SEARCH
 
     # The classifier's own reading of "the reader wants to see this", honoured
-    # for prose, ignored where the shape already decides. A weather card is what
-    # the reader came to see, and the picture search behind it cost a second
-    # search and put "bing images" in the footer of a forecast.
+    # for prose and for a profile, ignored where the shape already decides. A
+    # weather card is what the reader came to see, and the picture search behind
+    # it cost a second search and put "bing images" in the footer of a forecast.
     asked_to_see = bool(getattr(classification, "wants_image", False))
-    if shape in shapes.WIDGET_SHAPES:
-        asked_to_see = False
 
     shape, facets = _overview(shape, getattr(classification, "facets", ()), mode, depth)
     return Route(
         mode=mode,
         depth=depth,
         shape=shape,
-        wants_images=shapes.wants_image(shape) or asked_to_see,
+        wants_images=shapes.picture_for(shape, asked_to_see),
+        image_query=str(getattr(classification, "image_query", "") or "").strip(),
         place=str(getattr(classification, "place", "") or "").strip(),
         reason=_reason(complexity, requested, depth, auto, raised),
         facets=facets,
@@ -191,10 +193,48 @@ def widened(route: Route, requested: Depth) -> Route:
         depth=depth,
         shape=route.shape,
         wants_images=route.wants_images,
+        image_query=route.image_query,
         place=route.place,
         reason=f"No service answered · searching at {depth.label}",
         facets=route.facets,
     )
+
+
+# ------------------------------------------------------------- asks to see
+
+# An explicit request for a picture, by name. Only ever read as "yes": a
+# question without these words may still want one (a person, a brand), and that
+# is the classifier's call. These are the requests a small router model was seen
+# to miss, where missing them is a plain failure to answer.
+#
+# "Wie sieht X aus" and "what does X look like" are deliberately not here. They
+# are as often idioms as requests ("wie sieht es mit der Rente aus", "what does
+# a good CV look like"), and a forced picture search on an idiom shows a stock
+# photo under an answer about pensions. The classifier reads those in context.
+#
+# Word-bounded and tied to a following preposition or to a request verb, so
+# "Bildung", "Bildschirm", "Bildgebung" and "image processing" stay out.
+_PICTURE = r"(?:bild|bilder|foto|fotos|photo|photos|picture|pictures|image|images|pic|pics)"
+_ASKS_TO_SEE = re.compile(
+    rf"\b{_PICTURE}\s+(?:von|vom|der|des|of)\b"
+    r"|\b(?:zeig|zeige|show)\s+(?:mir\s+|me\s+|uns\s+|us\s+)?(?:mal\s+)?"
+    rf"(?:ein\w*\s+|an?\s+|the\s+|some\s+|das\s+|die\s+)?{_PICTURE}\b",
+    re.IGNORECASE,
+)
+# The same nouns used for an impression rather than an image: "sich ein Bild
+# von der Lage machen", "the big picture of the economy".
+_FIGURATIVE = re.compile(
+    r"\bbild\b.{0,60}\bmach"
+    r"|\b(?:big|bigger|clear|clearer|full|fuller|overall|complete|better|rough|accurate)"
+    r"\s+picture\b",
+    re.IGNORECASE,
+)
+
+
+def asks_to_see(query: str) -> bool:
+    """Whether the question explicitly asks for a picture."""
+    text = " ".join(str(query or "").split())
+    return bool(_ASKS_TO_SEE.search(text)) and not _FIGURATIVE.search(text)
 
 
 # ------------------------------------------------------------------ triage
