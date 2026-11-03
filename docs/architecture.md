@@ -189,6 +189,26 @@ The Science lens points the same pipeline at PubMed, arXiv, Crossref, OpenAlex,
 Semantic Scholar and Google Scholar. Lenses combine, and their results are
 ranked against each other.
 
+## Linked pages
+
+A link in the question names the page the answer is about, which outranks
+anything the ranking could decide. `app/search/links.py` finds public http(s)
+links in the question (at most three; `localhost`, private addresses and bare
+container names are ignored, since a self-hosted reader sits on the same network
+as Redis and SearXNG). `app/agent/linked.py` then reads each page before the
+classifier runs, on every preset including Quick, and registers it first,
+outside the source budget, so the first link is always source [1].
+
+The classifier sees the opening of the page. A request about the page itself
+("summarise this") is answered from the page without a search; a request that
+needs more ("what do other sources say?") searches with queries written from
+the page's subject, and no query ever carries the URL. The writer gets the
+page's passages ahead of the ranked ones, so trimming for a small window cuts
+search results first, and a rule in the prompt names the linked source as the
+subject of the answer. A page that cannot be read is reported in a notice, and
+the run falls back to an ordinary search. In a literature project with the web
+off, links are not followed.
+
 ## The citation check
 
 `app/agent/verify.py` runs after the answer has streamed, so it never delays

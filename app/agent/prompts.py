@@ -302,6 +302,25 @@ writing an introduction, a related-work or state-of-the-art section, an
 overview or summary of the literature, a comparison across the papers, which
 papers cover what. Then aim the queries at the main themes they share."""
 
+# What the classifier is told when the reader linked a page. It sees the page's
+# opening, because a request like "what do others say about this?" names no
+# subject of its own, and queries written without the page would search the
+# words "this article".
+CLASSIFY_LINKED = """\
+The reader linked {pages} in the question. It has been read in full and goes to
+the writer as the main source, so never search for the page itself and never
+put a URL into a search query. Here is how it begins:
+{excerpts}
+
+Set needs_search to false when the request is about the page itself:
+summarising, explaining, translating or assessing what it says, or a question
+the page answers on its own. Set it to true when the request asks for something
+the page cannot supply: background, other views, whether its claims hold up,
+what happened since. Then write the queries for that part, using the page's
+own subject and names, and rewrite the question so it names the page's subject
+instead of "this" or "the link"."""
+
+
 LIBRARY_PLAN = """\
 The sub-questions are researched in the person's own documents, listed here.
 Plan sub-questions these documents can answer, and phrase each query in their
@@ -317,6 +336,7 @@ def classify(
     *,
     choose_lenses: bool = False,
     catalog: str = "",
+    linked: list[tuple[int, str, str]] | None = None,
 ) -> list[Message]:
     return [
         _system(
@@ -331,11 +351,21 @@ def classify(
                 shapes=shapes.CLASSIFIER_GUIDANCE,
             ),
             LIBRARY_CATALOG.format(catalog=catalog) if catalog else "",
+            _classify_linked(linked or []),
             _today(),
         ),
         *history,
         {"role": "user", "content": query},
     ]
+
+
+def _classify_linked(pages: list[tuple[int, str, str]]) -> str:
+    if not pages:
+        return ""
+    excerpts = "\n\n".join(f"### {title}\n{excerpt.strip()}" for _index, title, excerpt in pages)
+    return CLASSIFY_LINKED.format(
+        pages="a page" if len(pages) == 1 else f"{len(pages)} pages", excerpts=excerpts
+    )
 
 
 # -------------------------------------------------------------------- answer
@@ -412,6 +442,33 @@ page"]`, shown as the number alone. The bare `[4]` only for a point drawn from
 the page as a whole."""
 
 
+# The writer's side of a linked page. Without it the page is one numbered
+# source among ten, and a model that finds a tidier summary of the subject on
+# another page writes from that one, which answers the topic and not the page
+# the reader asked about.
+LINKED_RULES = """\
+The reader linked {which} in the question: source {numbers}. That page is what
+the question is about, and it is given in full. Build the answer on it: what it
+says comes first and is cited to it. Use the other sources only to add context,
+to check the page or to contrast it, and say so plainly where they disagree
+with it. Never let another source take its place as the subject of the
+answer."""
+
+COMPACT_LINKED_RULES = """\
+Source {numbers} is the page the reader linked. Answer about that page first and
+cite it; use other sources only to add to it."""
+
+
+def _linked(indexes: list[int] | tuple[int, ...], compact: bool) -> str:
+    if not indexes:
+        return ""
+    numbers = "".join(f"[{index}]" for index in indexes)
+    if compact:
+        return COMPACT_LINKED_RULES.format(numbers=numbers)
+    which = "a page" if len(indexes) == 1 else "these pages"
+    return LINKED_RULES.format(which=which, numbers=numbers)
+
+
 def _compact(library: bool) -> str:
     return f"{COMPACT_RULES}\n\n{COMPACT_LIBRARY_RULES}" if library else COMPACT_RULES
 
@@ -426,15 +483,17 @@ def answer(
     facets: tuple[str, ...] = (),
     compact: bool = False,
     library: bool = False,
+    linked: list[int] | tuple[int, ...] = (),
 ) -> list[Message]:
     return [
-        _system(_compact(library), _today())
+        _system(_compact(library), _linked(linked, True), _today())
         if compact
         else _system(
             ANSWER.format(citations=CITATION_RULES),
             EVIDENCE_RULES,
             ANSWER_RULES,
             LIBRARY_RULES if library else "",
+            _linked(linked, False),
             shapes.spec(shape, facets),
             _today(),
         ),
@@ -733,6 +792,7 @@ def report(
     unanswered: list[str] | None = None,
     compact: bool = False,
     library: bool = False,
+    linked: list[int] | tuple[int, ...] = (),
 ) -> list[Message]:
     context = format_evidence(passages)
     if findings_text:
@@ -749,13 +809,14 @@ def report(
         # The shape spec is dropped with the rest in compact mode: a
         # card is built by its own structured call, so layout instructions here
         # buy a small model nothing and cost it the context its sources need.
-        _system(_compact(library), _today())
+        _system(_compact(library), _linked(linked, True), _today())
         if compact
         else _system(
             REPORT.format(citations=CITATION_RULES),
             EVIDENCE_RULES,
             ANSWER_RULES,
             LIBRARY_RULES if library else "",
+            _linked(linked, False),
             shapes.spec(shape, facets),
             _today(),
         ),

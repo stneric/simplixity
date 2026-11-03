@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from dataclasses import dataclass
 
 import httpx
 
@@ -29,10 +30,29 @@ _gate = asyncio.Semaphore(settings.content_concurrency)
 _SKIP_SUFFIXES = (".zip", ".exe", ".dmg", ".mp4", ".mp3", ".png", ".jpg", ".jpeg", ".gif", ".svg")
 
 
+@dataclass(slots=True)
+class Page:
+    """A page as the reader returned it: its text, and what its header said."""
+
+    text: str
+    title: str = ""
+    published: str = ""
+
+
 async def fetch(url: str, *, max_chars: int | None = None) -> str:
     """Return page text as markdown, or "" if it could not be read."""
+    page = await read_page(url, max_chars=max_chars)
+    return page.text if page else ""
+
+
+async def read_page(url: str, *, max_chars: int | None = None) -> Page | None:
+    """Read one page with its title and date, or None if it could not be read.
+
+    The title matters for a page the reader linked: it has no search result
+    behind it, so the header is the only place its name comes from.
+    """
     if url.lower().endswith(_SKIP_SUFFIXES):
-        return ""
+        return None
 
     headers = {"X-Return-Format": "markdown", "Accept": "text/plain"}
     if settings.jina_api_key:
@@ -50,10 +70,10 @@ async def fetch(url: str, *, max_chars: int | None = None) -> str:
         # 429 without a key is the common case and is not an error worth
         # shouting about: the snippet still carries the run.
         log.info("content fetch %s: HTTP %s", url, exc.response.status_code)
-        return ""
+        return None
     except httpx.HTTPError as exc:
         log.info("content fetch %s failed: %s", url, type(exc).__name__)
-        return ""
+        return None
 
     text = _clean(response.text, max_chars or settings.max_content_chars)
     if _unreadable(text):
@@ -61,8 +81,21 @@ async def fetch(url: str, *, max_chars: int | None = None) -> str:
         # that matter most to a research question say no. Reported at info
         # because it is a routine outcome, not a fault in this app.
         log.info("content fetch %s: page was not served (wall or stub)", url)
-        return ""
-    return text
+        return None
+    return Page(
+        text=text,
+        title=_header(response.text, "Title"),
+        published=_header(response.text, "Published Time"),
+    )
+
+
+def _header(raw: str, name: str) -> str:
+    """One field of the reader's header block (`Title: …`), or ""."""
+    head, _separator, _body = raw.partition("Markdown Content:")
+    for line in head.splitlines():
+        if line.startswith(f"{name}:"):
+            return " ".join(line[len(name) + 1 :].split())
+    return ""
 
 
 async def fetch_many(

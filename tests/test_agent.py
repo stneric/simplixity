@@ -14,10 +14,11 @@ import pytest
 
 from app.agent import blocks as agent_blocks
 from app.agent import budget as budget_module
-from app.agent import deep, orchestrator, research, verify, widgets
+from app.agent import deep, linked, orchestrator, research, verify, widgets
 from app.agent import depth as depth_module
 from app.agent.orchestrator import RunRequest
 from app.llm import Delta, LLMError
+from app.search import content
 from app.search import weather as weather_source
 from app.search.base import SearchResult
 from app.search.searxng import SearchReport
@@ -1638,3 +1639,159 @@ def test_earlier_answers_reach_the_model_without_their_citation_numbers():
     [question, answer] = prompts.trim_history(history)
     assert question["content"] == "Wie skaliert man?"
     assert answer["content"] == "Man skaliert und. Sie."
+
+
+# ----------------------------------------------------------------- linked pages
+#
+# A link in the question is the reader naming the page the answer is about. It
+# is read whatever the preset, holds citation number 1, reaches the writer ahead
+# of every search result, and a question about the page alone is not searched.
+
+ARTICLE = "https://news.example.org/kreatin-studie"
+PAGE_TEXT = "The linked article reports that xautoclaim reclaims pending entries. " * 40
+
+
+@pytest.fixture
+def page(monkeypatch):
+    """The linked page, readable. `page.urls` records what was asked for."""
+
+    async def read_page(url, *, max_chars=None):
+        read_page.urls.append(url)
+        return content.Page(text=PAGE_TEXT, title="Linked article", published="2026-10-01")
+
+    read_page.urls = []
+    monkeypatch.setattr(linked.content, "read_page", read_page)
+    return read_page
+
+
+@pytest.fixture
+def prompts_seen(wired):
+    """Every message list the writer was given."""
+    seen: list[list[dict]] = []
+    original = wired.stream
+
+    def stream(messages, **kwargs):
+        seen.append(messages)
+        return original(messages, **kwargs)
+
+    wired.stream = stream
+    return seen
+
+
+async def test_the_linked_page_is_source_one_and_reaches_the_writer_first(
+    redis, wired, page, prompts_seen
+):
+    stream = RunStream(redis, "l1", ttl=60)
+    await orchestrator.run(stream, request(query=f"was sagt dieser Artikel? {ARTICLE}"))
+
+    _events, _blocks, done = await collect(stream)
+    assert done["status"] == "completed"
+    assert page.urls == [ARTICLE]
+
+    sources = next(b for b in await stream.snapshot() if b["type"] == "sources")
+    first = sources["data"]["sources"][0]
+    assert (first["index"], first["url"], first["title"]) == (1, ARTICLE, "Linked article")
+    # Searched as well (the fake classifier asks for it), and outside the
+    # evidence budget, so the search kept every slot it had.
+    assert len(sources["data"]["sources"]) > 1
+
+    user = prompts_seen[0][-1]["content"]
+    assert user.index("### [1] Linked article") < user.index("### [2]")
+    system = " ".join(prompts_seen[0][0]["content"].split())
+    assert "The reader linked a page in the question: source [1]" in system
+
+
+async def test_a_question_about_the_page_alone_is_not_searched(
+    redis, wired, page, prompts_seen, monkeypatch
+):
+    async def explode(*_args, **_kwargs):
+        raise AssertionError("a summary of the linked page must not search")
+
+    monkeypatch.setattr(research, "search_all", explode)
+    wired.classification = {"needs_search": False, "search_queries": []}
+
+    stream = RunStream(redis, "l2", ttl=60)
+    await orchestrator.run(stream, request(query=f"fasse zusammen: {ARTICLE}"))
+
+    _events, blocks, done = await collect(stream)
+    assert done["status"] == "completed"
+    assert done["stats"]["searches"] == 0
+    assert "sources" in blocks  # answered from the page, and cited to it
+    assert "### [1] Linked article" in prompts_seen[0][-1]["content"]
+
+
+async def test_the_page_is_read_on_quick_too(redis, wired, page):
+    """Quick reads no search results. The page the reader pointed at is not one."""
+    stream = RunStream(redis, "l3", ttl=60)
+    await orchestrator.run(stream, request(query=f"kurz: {ARTICLE}", depth="quick"))
+
+    _events, _blocks, done = await collect(stream)
+    assert page.urls == [ARTICLE]
+    assert done["stats"]["pages_fetched"] == 1
+
+
+async def test_an_unreadable_link_is_said_and_searched_instead(redis, wired, monkeypatch):
+    async def read_page(url, *, max_chars=None):
+        return None
+
+    monkeypatch.setattr(linked.content, "read_page", read_page)
+    wired.classification = {"needs_search": False, "search_queries": []}
+
+    stream = RunStream(redis, "l4", ttl=60)
+    await orchestrator.run(stream, request(query=f"fasse zusammen: {ARTICLE}"))
+
+    _events, _blocks, done = await collect(stream)
+    snapshot = await stream.snapshot()
+    notices = [b["data"]["text"] for b in snapshot if b["type"] == "notice"]
+    assert any(ARTICLE in text for text in notices)
+    assert done["stats"]["searches"] >= 1
+
+
+async def test_no_query_carries_the_url(redis, wired, page, monkeypatch):
+    searched: list[str] = []
+    original = research.search_all
+
+    async def search_all(queries, **kwargs):
+        searched.extend(queries)
+        return await original(queries, **kwargs)
+
+    monkeypatch.setattr(research, "search_all", search_all)
+    wired.classification = {"search_queries": [f"kreatin {ARTICLE}", ARTICLE]}
+
+    stream = RunStream(redis, "l5", ttl=60)
+    await orchestrator.run(stream, request(query=f"stimmt das? {ARTICLE}"))
+
+    assert searched == ["kreatin"]
+
+
+async def test_a_link_is_not_small_talk(redis, wired, page):
+    stream = RunStream(redis, "l6", ttl=60)
+    await orchestrator.run(stream, request(query=f"danke {ARTICLE}"))
+    assert page.urls == [ARTICLE]
+
+
+async def test_a_linked_page_gets_no_stray_picture(redis, wired, page, monkeypatch):
+    """Asked "was ist <link>", the classifier picks a profile, and a profile
+    falls back to the first thumbnail any search result carries."""
+
+    async def search_images(*_args, **_kwargs):
+        raise AssertionError("a question about a linked page must not search for pictures")
+
+    original = research.search_all
+
+    async def search_all(queries, **kwargs):
+        results, report = await original(queries, **kwargs)
+        for result in results:
+            result.image = "https://cdn.example.test/stock.jpg"
+        return results, report
+
+    monkeypatch.setattr(research, "search_images", search_images)
+    monkeypatch.setattr(research, "search_all", search_all)
+    wired.classification = {"answer_shape": "profile"}
+
+    stream = RunStream(redis, "l7", ttl=60)
+    await orchestrator.run(stream, request(query=f"was ist {ARTICLE}"))
+
+    _events, blocks, done = await collect(stream)
+    assert done["status"] == "completed"
+    assert "image" not in blocks
