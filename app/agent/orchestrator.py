@@ -337,9 +337,7 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
             found = await deep.research_deeply(ctx, question, steps)
             passages, findings, unanswered = found.passages, found.findings, found.unanswered
             if route.wants_images and ctx.budget.can_research():
-                await research.find_images(
-                    ctx, question, steps, query=_image_query(route, queries)
-                )
+                await research.find_images(ctx, question, steps, query=_image_query(route, queries))
         else:
             passages = await _research_directly(ctx, question, queries, steps, route)
 
