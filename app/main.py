@@ -268,7 +268,8 @@ if WEB_DIR.is_dir():
         # does that to favicons harder than to anything else, so a redesigned
         # icon otherwise stays the old one for days.
         return FileResponse(
-            WEB_DIR / "assets" / "favicon.svg", headers={"Cache-Control": "no-cache, must-revalidate"}
+            WEB_DIR / "assets" / "favicon.svg",
+            headers={"Cache-Control": "no-cache, must-revalidate"},
         )
 
     @app.get("/sw.js", include_in_schema=False)
