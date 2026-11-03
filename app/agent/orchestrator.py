@@ -29,7 +29,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.agent import blocks, deep, prompts, research, shapes, verify, widgets
+from app.agent import blocks, deep, linked, prompts, research, shapes, verify, widgets
 from app.agent import depth as depth_module
 from app.agent import route as route_module
 from app.agent.budget import Budget, Cancelled
@@ -39,6 +39,7 @@ from app.config import settings
 from app.embed.rerank import passages_from
 from app.llm import LLM, LLMAuthError, LLMConfigError, LLMError
 from app.search import lenses as lens_module
+from app.search import links
 from app.search import weather as weather_source
 from app.search.base import LIBRARY_PREFIX
 from app.search.searxng import HARD_WINDOWS, TIME_RANGES
@@ -213,9 +214,13 @@ async def _emit_provenance(ctx: RunContext) -> None:
 
 
 async def _execute(ctx: RunContext, steps: Steps) -> None:
+    # A link the reader typed is fetched through the web, so a project with the
+    # web off leaves it unread like everything else outside the papers.
+    urls = [] if ctx.source_bound else links.extract(ctx.query)
     # The pre-router first, because it costs nothing. It only answers when it is
-    # certain, and None (ask the model) is its ordinary answer.
-    shortcut = route_module.triage(ctx.query)
+    # certain, and None (ask the model) is its ordinary answer. Not with a link
+    # in the question: "thanks https://…" is not small talk.
+    shortcut = None if urls else route_module.triage(ctx.query)
     declined = ""
     if shortcut is not None and ctx.source_bound and shortcut.mode == route_module.LOOKUP:
         # A forecast is fetched from a web service, and this project has the web
@@ -234,7 +239,8 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
             ctx.catalog = await ctx.library.catalog()
         except Exception as exc:  # the queries are only less well aimed without it
             log.info("could not list the library: %s", exc)
-    classification = await _classify(ctx, steps)
+    pinned = await linked.read(ctx, urls, steps)
+    classification = await _classify(ctx, steps, pinned)
     question = classification.standalone_question.strip() or ctx.query
     route = route_module.plan(classification, ctx.requested_depth or ctx.depth)
 
@@ -250,6 +256,21 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
 
     if ctx.library is not None:
         route = _bound_to_library(ctx, route)
+
+    # A question about the linked page needs no search, but it is not the model
+    # alone either: it is answered from the page. A link that could not be read
+    # turns the same question into a search, the only way left to answer it.
+    search = True
+    if urls and route.mode == route_module.DIRECT:
+        route = linked.route(route, ctx.requested_depth or ctx.depth, read=bool(pinned))
+        search = not pinned
+    if pinned and not classification.wants_image:
+        # "Was ist <link>" reads as a profile, and a profile asks for a picture.
+        # The page is the subject here, and an image search finds pictures of
+        # whatever its words also name, so none is searched for or shown unless
+        # the reader asked to see something.
+        route = dataclasses.replace(route, wants_images=False)
+        ctx.stray_pictures = False
 
     if route.mode == route_module.LOOKUP:
         # Compared folded, because the two names come from different places: the
@@ -280,31 +301,36 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
     ctx.prefer_recent = bool(recency)
     ctx.time_range = recency if recency in HARD_WINDOWS else ""
 
-    await steps.retitle(f"Researching “{_ellipsis(question)}”")
-    _widen_for(ctx, route.shape)
-
     # Trimmed again, against the preset the router actually chose. The
     # classifier was told the provisional preset's ceiling (it has to run
     # before there is a route), so on "Auto" it may well have written three
     # queries for a question that turned out to need one.
     queries = classification.search_queries[: ctx.depth.queries]
     overview = []
-    if ctx.library is not None:
-        # A short attachment is read whole whatever was asked: the search
-        # could only hand over less of it. Abstracts only when the request is
-        # about the library as a whole, as before.
-        whole = classification.whole_library
-        if whole or await _fits_whole(ctx):
-            overview = await _library_overview(ctx, steps, papers=whole)
     findings = ""
     unanswered: list[str] = []
-    if ctx.depth.sub_questions:
-        found = await deep.research_deeply(ctx, question, steps)
-        passages, findings, unanswered = found.passages, found.findings, found.unanswered
-        if route.wants_images and ctx.budget.can_research():
-            await research.find_images(ctx, question, steps, query=queries[0] if queries else "")
+    passages: list = []
+    if not search:
+        await steps.retitle(f"Reading “{_ellipsis(pinned.pages[0][1])}”")
     else:
-        passages = await _research_directly(ctx, question, queries, steps, route)
+        await steps.retitle(f"Researching “{_ellipsis(question)}”")
+        _widen_for(ctx, route.shape)
+        if ctx.library is not None:
+            # A short attachment is read whole whatever was asked: the search
+            # could only hand over less of it. Abstracts only when the request
+            # is about the library as a whole, as before.
+            whole = classification.whole_library
+            if whole or await _fits_whole(ctx):
+                overview = await _library_overview(ctx, steps, papers=whole)
+        if ctx.depth.sub_questions:
+            found = await deep.research_deeply(ctx, question, steps)
+            passages, findings, unanswered = found.passages, found.findings, found.unanswered
+            if route.wants_images and ctx.budget.can_research():
+                await research.find_images(
+                    ctx, question, steps, query=queries[0] if queries else ""
+                )
+        else:
+            passages = await _research_directly(ctx, question, queries, steps, route)
 
     # Last stop before the prompt is built: whatever the answer is about to be
     # written from should be a page the run actually opened, not two lines an
@@ -314,11 +340,13 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
     passages = await research.read_cited(
         ctx, question, passages, steps, limit=ctx.depth.fetch_pages
     )
-    if overview:
-        # First, so a window too small for everything keeps the overview the
-        # request was about, and once: the ranking may have picked some too.
-        shown = {(p.source_index, p.text) for p in overview}
-        passages = overview + [p for p in passages if (p.source_index, p.text) not in shown]
+    lead = pinned.passages + overview
+    if lead:
+        # First, so a window too small for everything keeps the linked page and
+        # the overview the request was about, and once: the ranking may have
+        # picked some of their passages too.
+        shown = {(p.source_index, p.text) for p in lead}
+        passages = lead + [p for p in passages if (p.source_index, p.text) not in shown]
 
     def build(kept: list, compact: bool) -> list[dict[str, Any]]:
         return (
@@ -332,6 +360,7 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
                 unanswered=unanswered,
                 compact=compact,
                 library=ctx.library is not None,
+                linked=pinned.indexes,
             )
             if ctx.depth.sub_questions
             else prompts.answer(
@@ -343,6 +372,7 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
                 facets=route.facets,
                 compact=compact,
                 library=ctx.library is not None,
+                linked=pinned.indexes,
             )
         )
 
@@ -761,12 +791,13 @@ async def _second_look(ctx: RunContext, question: str, passages: list, steps: St
     return await research.rank(ctx, question, ctx.sources.all(), top_k=ctx.depth.passages)
 
 
-async def _classify(ctx: RunContext, steps: Steps) -> Classification:
+async def _classify(ctx: RunContext, steps: Steps, pinned: linked.Linked) -> Classification:
     """Decide whether to search, and with what.
 
     A classifier failure is not fatal: searching the raw question is a fine
     default. An *auth* failure is fatal, and pretending otherwise would burn a
-    minute of research before failing at the same place anyway.
+    minute of research before failing at the same place anyway. With a linked
+    page read, the default is that page instead: the question was about it.
     """
     async with steps("Reading the question") as step:
         try:
@@ -782,6 +813,7 @@ async def _classify(ctx: RunContext, steps: Steps) -> Classification:
                     ctx.lenses,
                     choose_lenses=ctx.auto_lenses,
                     catalog=ctx.catalog,
+                    linked=pinned.pages,
                 ),
                 Classification,
                 max_tokens=CLASSIFY_TOKENS,
@@ -789,13 +821,21 @@ async def _classify(ctx: RunContext, steps: Steps) -> Classification:
         except (LLMAuthError, LLMConfigError):
             raise
         except LLMError as exc:
+            if pinned:
+                log.info("classification failed, answering from the linked page: %s", exc)
+                step.text = "Answering from the linked page"
+                return Classification(needs_search=False, standalone_question=ctx.query)
             log.info("classification failed, searching the raw question: %s", exc)
             step.text = "Searching the question as asked"
+            query = links.remove(ctx.query) or ctx.query
             return Classification(
-                needs_search=True, standalone_question=ctx.query, search_queries=[ctx.query]
+                needs_search=True, standalone_question=ctx.query, search_queries=[query]
             )
 
-        queries = [q.strip() for q in result.search_queries if q and q.strip()][: ctx.depth.queries]
+        # A URL in a query is searched as a string of words. The classifier is
+        # told not to write one, and this holds when it does anyway.
+        written = (links.remove(q) if "://" in q else q.strip() for q in result.search_queries if q)
+        queries = [q for q in written if q][: ctx.depth.queries]
         result.search_queries = queries
         # Dropped here rather than at the search, so the step the reader sees
         # and the window the search actually used cannot disagree.

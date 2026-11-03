@@ -873,7 +873,7 @@ async def emit(
             # overriding that on an identity card is how the wrong face ends up
             # under the right name. As its own block it carries its title,
             # domain and source number, so the reader can see what it is.
-            if shape == shapes.PROFILE and not payload.get("image"):
+            if shape == shapes.PROFILE and not payload.get("image") and ctx.stray_pictures:
                 await _best_picture(ctx, "the profile card declined a portrait")
             return True
         # Silent to the reader, never to the log: a card that quietly never
@@ -887,7 +887,7 @@ async def emit(
     # otherwise show nothing at all because a *different* model call failed to
     # fill a schema. Asked "apollo 17", it retrieved six pictures, lost the
     # profile card to one bad JSON response, and answered in bare prose.
-    if shapes.wants_image(shape) and await _best_picture(ctx):
+    if shapes.wants_image(shape) and ctx.stray_pictures and await _best_picture(ctx):
         return True
 
     # Most refusals stay silent: the prose answers the question either way and a

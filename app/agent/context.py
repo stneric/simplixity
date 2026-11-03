@@ -298,6 +298,12 @@ class RunContext:
     # as results: the agent searches it and never learns what stores it.
     library: Any = None
     web: bool = True
+    # Whether a card may fall back to the first picture any source carries.
+    # Off when the question is about a page the reader linked and they did not
+    # ask to see anything: the picture would come from a search result about
+    # the subject, not from the page, and is as likely a logo or a stock photo
+    # as anything to do with it.
+    stray_pictures: bool = True
     notices: list[str] = field(default_factory=list)
 
     def take_project_sources(self) -> list[SearchResult]:

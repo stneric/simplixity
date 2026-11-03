@@ -23,6 +23,10 @@ OpenRouter, Groq, Ollama or LM Studio, and has no frontend build step.
   peer-reviewed paper, documentation, newsroom, ordinary page) and ranked on
   that and on how many independent engines returned it. No single domain may
   fill more than two citation slots.
+- **Paste a link.** A URL in the question is read in full first, on every
+  depth, and becomes source [1]. "Summarise this" is answered from the page
+  alone; "what do others say about this" searches around it, with the linked
+  page kept as the main subject of the answer.
 - **Search lenses.** Web, Science (PubMed, arXiv, Crossref, OpenAlex, Semantic
   Scholar), News, Docs & code, and Reference, alone or combined.
 - **Citation check.** Every cited sentence is judged *supported*, *partly* or
