@@ -1,13 +1,27 @@
-<img src="web/assets/icon.svg" alt="" width="72" height="72">
+<p align="center">
+  <img src="web/assets/icon.svg" alt="" width="72" height="72">
+</p>
 
-# Simplixity
+<h1 align="center">Simplixity</h1>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.12%2B-1a1a1a?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.12+">
+  <img src="https://img.shields.io/badge/FastAPI-1a1a1a?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/Redis-1a1a1a?style=for-the-badge&logo=redis&logoColor=white" alt="Redis">
+  <img src="https://img.shields.io/badge/SQLite-1a1a1a?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite">
+  <img src="https://img.shields.io/badge/SearXNG-1a1a1a?style=for-the-badge&logo=searxng&logoColor=white" alt="SearXNG">
+  <img src="https://img.shields.io/badge/Docker_Compose-1a1a1a?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose">
+  <img src="https://img.shields.io/badge/OpenRouter-1a1a1a?style=for-the-badge&logo=openrouter&logoColor=white" alt="OpenRouter">
+  <img src="https://img.shields.io/badge/Ollama-1a1a1a?style=for-the-badge&logo=ollama&logoColor=white" alt="Ollama">
+  <img src="https://img.shields.io/badge/License-AGPL--3.0-1a1a1a?style=for-the-badge" alt="License: AGPL-3.0-or-later">
+</p>
 
 A self-hosted (re)search assistant. You ask a question, it searches the web
 through your own SearXNG instance, reads the pages it finds and writes an
 answer in which every claim cites a numbered source. A second pass then checks
 each cited sentence against the source it cites and shows you the result.
 
-![An answer in Simplixity: a comparison table with a citation number on every row, followed by the written answer](docs/screenshot.png)
+![Simplixity answering "what is https://github.com/stneric/simplixity": a profile card built from the linked page, followed by the written answer with a citation number after each claim](docs/ui-demo/simple-search.png)
 
 It runs as three containers (the app, Redis, SearXNG), works with any model on
 OpenRouter, Groq, Ollama or LM Studio, and has no frontend build step.
@@ -29,10 +43,14 @@ OpenRouter, Groq, Ollama or LM Studio, and has no frontend build step.
   page kept as the main subject of the answer.
 - **Search lenses.** Web, Science (PubMed, arXiv, Crossref, OpenAlex, Semantic
   Scholar), News, Docs & code, and Reference, alone or combined.
+
+  ![The lens menu: Auto, Web, Science, News, Docs & code, Reference, Data and Images, each with a one-line description](docs/ui-demo/sources.png)
 - **Citation check.** Every cited sentence is judged *supported*, *partly* or
   *not supported* by the source it cites. Quotes and numbers are also compared
   mechanically with the source text, and anything left unchecked is counted as
   unchecked.
+
+  ![The citation check under an answer: every cited sentence listed with its verdict, and a "Partly" verdict explaining what the source does and does not say](docs/ui-demo/citation-check.png)
 - **Literature workflow.** A separate page for building a reading list: an
   intake conversation turns into search criteria, rounds of results from
   OpenAlex, Semantic Scholar, Crossref, arXiv and IEEE Xplore are screened
@@ -44,6 +62,8 @@ OpenRouter, Groq, Ollama or LM Studio, and has no frontend build step.
 - **Structured answers.** Prices, forecasts, match results, comparisons,
   timelines and diagrams arrive as cards built from validated fields, each
   naming its source.
+
+  ![A diagram card explaining an autoencoder (encoder, bottleneck, decoder, reconstructed output) with its source, followed by the cited answer](docs/ui-demo/modal-answer.png)
 - **Runs survive reloads.** A run belongs to the server, not to the browser tab.
   Reload, close the laptop or lose the network, and the answer picks up where
   it was.
@@ -75,6 +95,10 @@ OpenRouter, Groq, Ollama or LM Studio, and has no frontend build step.
 6. **Citation check.** A judge model rules on every cited sentence, and
    quotes and numbers are compared with the source text without a model.
 
+While a run is going, each of these steps shows up live above the answer:
+
+![A run in progress: searching Web and Reference, 2 searches with 10 of 12 results relevant, 5 pages read, a gap check, and the pages the answer will cite being read](docs/ui-demo/explain.png)
+
 The classifier, the gap check and the citation check can run on a small,
 cheap *router model* set in the settings, and the citation check can get a
 judge model of its own; the answer itself comes from the chat model. The footer under each answer names the models, the engines that
@@ -101,6 +125,8 @@ docker compose up -d --build
 The app is at <http://localhost:3000>. The first start pulls SearXNG and Redis
 and builds the image, which takes a minute or two. Create a profile, pick a
 model in the settings, and ask something.
+
+![The start screen: a sidebar for chats and projects, suggested questions, and the input with the lens and depth menus](docs/ui-demo/main.png)
 
 `curl localhost:3000/api/health` reports whether Redis, SQLite and the API key
 are in place, and `docker compose logs -f simplixity` shows what
@@ -164,6 +190,8 @@ The container starts as root only to fix the ownership of a bind-mounted
 `/data` and then drops to uid 1000 before starting Python.
 
 ## Research depth
+
+![The depth menu: Auto, Quick, Balanced and Deep, each with what it does](docs/ui-demo/search-type.png)
 
 | | Simple | Quick | Balanced | Deep |
 |---|---|---|---|---|
