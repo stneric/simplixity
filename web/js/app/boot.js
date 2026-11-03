@@ -10,7 +10,7 @@
 // here, and stays inside `script-src 'self'`, which is why this is a file and
 // not four lines of inline script (see CONTENT_SECURITY_POLICY in app/main.py).
 //
-// It decides nothing on its own. It paints the answer that web/sidebar.js is
+// It decides nothing on its own. It paints the answer that web/js/app/sidebar.js is
 // about to give, and that module removes this class in the same frame as it
 // applies the real state. The key and the media query are duplicated there; a
 // synchronous script cannot import them, so they are kept in step by hand.

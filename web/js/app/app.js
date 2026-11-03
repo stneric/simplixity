@@ -1,21 +1,21 @@
-import { subscribe } from './sse.js';
-import { BlockView, errorNote } from './blocks.js';
-import { hydrate, iconNode } from './icons.js';
+import { subscribe } from '../chat/sse.js';
+import { BlockView, errorNote } from '../render/blocks.js';
+import { hydrate, iconNode } from '../shared/icons.js';
 import { markDisplayMode, registerServiceWorker } from './pwa.js';
 import { Settings } from './settings.js';
-import { ChatList } from './chats.js';
-import { ProjectList } from './projects.js';
-import { DepthChip } from './depth.js';
-import { LensChip } from './lenses.js';
-import { SourceSwitch, isLibrary, libraryBadge } from './source-switch.js';
-import { KEYS, bind, keycap, label, tip } from './shortcuts.js';
+import { ChatList } from '../chat/chats.js';
+import { ProjectList } from '../projects/projects.js';
+import { DepthChip } from '../chat/depth.js';
+import { LensChip } from '../chat/lenses.js';
+import { SourceSwitch, isLibrary, libraryBadge } from '../chat/source-switch.js';
+import { KEYS, bind, keycap, label, tip } from '../shared/shortcuts.js';
 import { mountSidebar } from './sidebar.js';
-import { ensureProfile, mountProfile } from './profile.js';
-import { mountTools } from './tools.js';
-import { ProjectBar, ProjectHome } from './project-view.js';
-import { Attachments } from './attachments.js';
-import { ACCEPT, accepted, fileSummary, filesBadge } from './attachments-core.js';
-import { filesByMessage, modelLabel, stamp } from './turns-core.js';
+import { ensureProfile, mountProfile } from '../shared/profile.js';
+import { mountTools } from '../tools/tools.js';
+import { ProjectBar, ProjectHome } from '../projects/project-view.js';
+import { Attachments } from '../chat/attachments.js';
+import { ACCEPT, accepted, fileSummary, filesBadge } from '../chat/attachments-core.js';
+import { filesByMessage, modelLabel, stamp } from '../chat/turns-core.js';
 
 hydrate();
 markDisplayMode();
@@ -29,7 +29,6 @@ const input = $('query');
 const output = $('output');
 const welcome = $('welcome');
 const scroll = $('scroll');
-const statusEl = $('status');
 const sendBtn = $('send');
 
 // One place for "which chat am I in and what is streaming", so nothing has to
@@ -230,11 +229,6 @@ function syncComposer() {
 
 // ── chrome ───────────────────────────────────────────────────────────
 
-function setStatus(label) {
-  statusEl.dataset.state = label;
-  statusEl.textContent = label === 'idle' ? '' : label;
-}
-
 // One button for both jobs: it submits while idle and cancels while a run is
 // in flight. Switching `type` keeps the two paths out of each other's way,
 // as a submit button the form's own handler fires, as a plain button only the
@@ -392,13 +386,11 @@ function detach() {
   state.subscription = null;
   state.runId = null;
   setBusy(false);
-  setStatus('idle');
 }
 
 function attach(runId, view, note, answered) {
   state.runId = runId;
   setBusy(true);
-  setStatus('connecting');
   pinned = true;
 
   state.subscription = subscribe(runId, {
@@ -406,11 +398,9 @@ function attach(runId, view, note, answered) {
       view.render(blocks);
       stickToBottom();
     },
-    onStatus: setStatus,
     onPhase: (phase) => view.setPhase(phase),
     onDone: ({ status, message }) => {
       setBusy(false);
-      setStatus('idle');
       state.runId = null;
       view.settle();
       answered({ at: new Date() });
@@ -439,7 +429,6 @@ form.addEventListener('submit', async (event) => {
     // Asked while a file is still being read: the answer waits for it rather
     // than being written without it.
     waitingForFiles = true;
-    setStatus('reading files');
     sendBtn.disabled = true;
     await attachments.settled();
     sendBtn.disabled = false;
@@ -447,7 +436,6 @@ form.addEventListener('submit', async (event) => {
     // Left for another chat while the files were read: the question stays in
     // the composer rather than being sent into whatever is open now.
     if (nav !== state.nav) {
-      setStatus('idle');
       return;
     }
   }
@@ -459,7 +447,6 @@ form.addEventListener('submit', async (event) => {
   const files = attachments.draft;
   const { view, note, answered } = newTurn(query, { files, sentAt: new Date() });
   stickToBottom();
-  setStatus('starting');
 
   let response;
   try {
@@ -487,14 +474,12 @@ form.addEventListener('submit', async (event) => {
     });
   } catch {
     note(errorNote('Could not reach the server.'));
-    setStatus('idle');
     return;
   }
 
   if (!response.ok) {
     const detail = await response.json().catch(() => null);
     note(errorNote(detail?.detail ?? `Could not start the run (HTTP ${response.status}).`));
-    setStatus('idle');
     return;
   }
 
@@ -519,7 +504,6 @@ form.addEventListener('submit', async (event) => {
 sendBtn.addEventListener('click', async () => {
   if (!state.runId) return; // idle: type=submit, the form's submit handler sends
   sendBtn.disabled = true;
-  setStatus('stopping');
   await fetch(`/api/runs/${state.runId}/cancel`, { method: 'POST' }).catch(() => {});
 });
 
@@ -708,7 +692,6 @@ $('open-settings').append(keycap(KEYS.settings));
 // ── boot ─────────────────────────────────────────────────────────────
 
 setBusy(false);
-setStatus('idle');
 
 // Before anything personal loads: until a profile is chosen the server answers
 // every one of those requests with a 401, and the picker is what fixes that.

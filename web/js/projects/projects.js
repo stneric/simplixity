@@ -5,9 +5,9 @@
 // already written there are searched alongside the web (`app/search/project.py`).
 // Both halves are the same selection, which is why one small module owns it.
 
-import { iconNode } from './icons.js';
-import { confirmDialog, promptDialog } from './dialog.js';
-import { KEYS, keycap, label } from './shortcuts.js';
+import { iconNode } from '../shared/icons.js';
+import { confirmDialog, promptDialog } from '../shared/dialog.js';
+import { KEYS, keycap, label } from '../shared/shortcuts.js';
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);

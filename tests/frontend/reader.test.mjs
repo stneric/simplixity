@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { locate, parseHash, sourceHash } from '../../web/reader-core.js';
+import { locate, parseHash, sourceHash } from '../../web/js/reader/reader-core.js';
 
 test('a citation carries its passage, evidence and context in the fragment, and back', () => {
   const source = { evidence: ['all of the keys & values'], passages: ['A #hash? passage'] };

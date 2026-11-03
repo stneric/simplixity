@@ -30,7 +30,7 @@
          home-screen icon from apple-touch-icon.png and the manifest, and those
          otherwise keep the old artwork long after the tab has updated.
          One number for all of them: bump it here and in manifest.webmanifest
-         together whenever web/icon.svg is re-rendered.
+         together whenever web/assets/icon.svg is re-rendered.
          An icon already sitting on a home screen is never refetched, so that
          one still has to be removed and re-added. -->
     <link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml" />
@@ -45,8 +45,8 @@
     <link rel="stylesheet" href="/static/styles.css" />
 
     <!-- Deliberately blocking, and deliberately not a module: it settles whether
-         the sidebar starts open before anything is drawn. See web/boot.js. -->
-    <script src="/static/boot.js"></script>
+         the sidebar starts open before anything is drawn. See web/js/app/boot.js. -->
+    <script src="/static/js/app/boot.js"></script>
   </head>
   <body>
     <div class="app" id="app">
@@ -68,12 +68,12 @@
         <nav class="chat-list" id="chat-list" aria-label="Chat history"></nav>
 
         <div class="sidebar-foot">
-          <!-- Whose chats these are. A name, not an account: see web/profile.js. -->
+          <!-- Whose chats these are. A name, not an account: see web/js/shared/profile.js. -->
           <button class="sidebar-item" id="switch-profile">
             <i data-icon="user" data-size="16"></i>
             <span id="profile-name">Profile</span>
           </button>
-          <!-- Single-purpose jobs beside the chat, see web/tools.js. -->
+          <!-- Single-purpose jobs beside the chat, see web/js/tools/tools.js. -->
           <button class="sidebar-item" id="open-tools">
             <i data-icon="wrench" data-size="16"></i>
             <span>Tools</span>
@@ -101,13 +101,10 @@
             <i data-icon="plus"></i>
           </button>
           <!-- Inside a project only: where you are, the way out, and the model
-               that writes its answers (web/project-view.js). An ordinary chat
+               that writes its answers (web/js/projects/project-view.js). An ordinary chat
                keeps the topbar empty; its model lives in Settings, which is
                where it is set once and left. -->
           <div class="project-bar" id="project-bar" hidden></div>
-          <div class="topbar-right">
-            <span class="run-state" id="status" data-state="idle" role="status" aria-live="polite"></span>
-          </div>
         </header>
 
         <div class="scroll" id="scroll">
@@ -133,7 +130,7 @@
                saying so is a state with no visible cause. -->
           <p class="project-badge" id="project-badge" hidden></p>
           <form class="composer" id="composer" autocomplete="off">
-            <!-- Files attached to this chat (web/attachments.js). With any, the
+            <!-- Files attached to this chat (web/js/chat/attachments.js). With any, the
                  chat answers from them, as a literature project from its papers. -->
             <ul class="attachments" id="attachments" aria-label="Attached files" hidden></ul>
             <textarea
@@ -174,20 +171,15 @@
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <header class="modal-head">
           <h2 id="settings-title">Settings</h2>
+          <span class="save-state" id="settings-status" role="status"></span>
           <button class="icon-btn" id="close-settings" title="Close" aria-label="Close">
             <i data-icon="close" data-size="17"></i>
           </button>
         </header>
 
         <div class="tabstrip" role="tablist" aria-label="Settings sections">
-          <button
-            class="tab"
-            role="tab"
-            id="tab-models"
-            aria-controls="panel-models"
-            aria-selected="true"
-          >
-            <i data-icon="spark" data-size="15"></i><span>Models</span>
+          <button class="tab" role="tab" id="tab-models" aria-controls="panel-models" aria-selected="true">
+            Models
           </button>
           <button
             class="tab"
@@ -197,7 +189,7 @@
             aria-selected="false"
             tabindex="-1"
           >
-            <i data-icon="telescope" data-size="15"></i><span>Research</span>
+            Research
           </button>
           <button
             class="tab"
@@ -207,7 +199,7 @@
             aria-selected="false"
             tabindex="-1"
           >
-            <i data-icon="globe" data-size="15"></i><span>General</span>
+            General
           </button>
         </div>
 
@@ -215,26 +207,22 @@
           <div class="tab-panel" role="tabpanel" id="panel-models" aria-labelledby="tab-models">
             <section class="field">
               <div class="field-head">
-                <label for="settings-chat-model">
-                  <i data-icon="message" data-size="14"></i><span>Chat model</span>
-                </label>
+                <label for="settings-chat-model">Chat model</label>
                 <button class="ghost-btn" id="refresh-models">
-                  <i data-icon="refresh" data-size="14"></i><span>Refresh</span>
+                  <i data-icon="refresh" data-size="13"></i><span>Refresh</span>
                 </button>
               </div>
               <div class="model-slot wide" id="settings-chat-model"></div>
               <p class="hint">
-                Writes the answer, and does the planning and reading behind it. Everything
-                below can be left alone; this is the one that decides how good an answer is.
+                Writes the answer and does the planning and reading behind it. This is the
+                one that decides how good an answer is.
               </p>
             </section>
 
             <section class="field">
               <div class="field-head">
-                <label for="router-model">
-                  <i data-icon="zap" data-size="14"></i><span>Router model</span>
-                </label>
-                <!-- The switch reads positively: on means the thing named above it is in
+                <label for="router-model">Router model</label>
+                <!-- The switch reads positively: on means the thing named beside it is in
                      use, like every other switch in the app. -->
                 <label class="switch labelled">
                   <span class="switch-text" id="router-state">Off</span>
@@ -244,18 +232,14 @@
               </div>
               <div class="model-slot wide" id="router-model"></div>
               <p class="hint">
-                A small, fast model for the cheap calls: triage, the gap check and the
-                citation check. It decides how much searching a question is worth and is the
-                one call standing between you and the first word of the answer. Off means
-                the chat model does these too, which is correct and costs more.
+                A small, fast model for triage, the gap check and the citation check. Off, the
+                chat model does these too: correct, but slower and more expensive.
               </p>
             </section>
 
             <section class="field">
               <div class="field-head">
-                <label for="judge-model">
-                  <i data-icon="shield" data-size="14"></i><span>Judge model</span>
-                </label>
+                <label for="judge-model">Judge model</label>
                 <label class="switch labelled">
                   <span class="switch-text" id="judge-state">Off</span>
                   <input type="checkbox" id="judge-on" aria-label="Use a separate judge model" />
@@ -264,19 +248,16 @@
               </div>
               <div class="model-slot wide" id="judge-model"></div>
               <p class="hint">
-                Checks every cited sentence against the source it cites, once the answer is
-                written. Pick one from <strong>another model family</strong> than the chat model:
-                a model judging its own answer shares the blind spots that wrote it. Off, the
-                router checks web answers and the writing model checks its own in literature
-                projects. The footer of every answer says which model checked it.
+                Checks every cited sentence against its source. Pick one from
+                <strong>another model family</strong> than the chat model, so it does not share
+                its blind spots. Off, the router checks web answers and the writing model
+                checks literature projects.
               </p>
             </section>
 
             <section class="field">
               <div class="field-head">
-                <label for="embedding-model">
-                  <i data-icon="layers" data-size="14"></i><span>Embedding model</span>
-                </label>
+                <label for="embedding-model">Embedding model</label>
                 <label class="switch labelled">
                   <span class="switch-text" id="embedding-state">Off</span>
                   <input type="checkbox" id="embedding-enabled" aria-label="Enable embeddings" />
@@ -285,36 +266,25 @@
               </div>
               <div class="model-slot wide" id="embedding-model"></div>
               <p class="hint">
-                Ranks retrieved passages before they reach the model. Charged per source
-                ranked rather than per call, so a deep run spends far more tokens here than
-                on the models, which is why the footer counts the two separately. Turn it
-                off and Simplixity falls back to keyword ranking: slightly worse, never broken.
+                Ranks retrieved passages before they reach the model. Charged per source, so a
+                deep run spends most of its tokens here. Off falls back to keyword ranking.
               </p>
             </section>
 
             <section class="field">
               <div class="field-head">
-                <label for="title-model">
-                  <i data-icon="message" data-size="14"></i><span>Chat title model</span>
-                </label>
+                <label for="title-model">Chat title model</label>
                 <label class="switch labelled">
                   <span class="switch-text" id="title-state">Off</span>
-                  <input
-                    type="checkbox"
-                    id="title-on"
-                    aria-label="Name new chats with a model"
-                  />
+                  <input type="checkbox" id="title-on" aria-label="Name new chats with a model" />
                   <span class="track"><span class="thumb"></span></span>
                 </label>
               </div>
               <div class="model-slot wide" id="title-model"></div>
               <p class="hint">
-                Names a new chat in a few words instead of using the first line of the
-                question. One short call per new chat, and it runs after the answer is
-                finished. <strong>It is not in the price the footer reports</strong>, which
-                is written before this call happens, so anything it spends is spent
-                invisibly. Off by default for that reason; on, pick the cheapest model you
-                have.
+                Names a new chat in a few words instead of its first line. Runs after the
+                answer, so <strong>its cost is not in the footer</strong>. Pick the cheapest
+                model you have.
               </p>
             </section>
           </div>
@@ -328,26 +298,25 @@
           >
             <section class="field">
               <div class="field-head">
-                <label for="depth">
-                  <i data-icon="gauge" data-size="14"></i><span>Default depth</span>
-                </label>
+                <label for="depth">Default depth</label>
               </div>
-              <select id="depth" class="select"></select>
+              <div class="select-wrap">
+                <select id="depth" class="select"></select>
+              </div>
               <p class="hint">
-                Each run can override this from the composer. Depth sets how wide the search
-                goes, how many pages are read, and when the run stops regardless.
+                How wide the search goes, how many pages are read, and when the run stops.
+                Each run can override it from the composer.
               </p>
             </section>
 
             <section class="field">
               <div class="field-head">
-                <label><i data-icon="library" data-size="14"></i><span>Default sources</span></label>
+                <label>Default sources</label>
               </div>
               <div id="settings-lenses" class="lens-settings"></div>
               <p class="hint">
-                Which corpora searches draw on. Results from every selected corpus are ranked
-                against each other, and each source is labelled with what it is: official
-                text, a paper, documentation, a newsroom or an ordinary page.
+                The corpora searches draw on. Results from every selected corpus are ranked
+                against each other.
               </p>
             </section>
           </div>
@@ -361,9 +330,7 @@
           >
             <section class="field">
               <div class="field-head">
-                <label for="home-location">
-                  <i data-icon="globe" data-size="14"></i><span>Home location</span>
-                </label>
+                <label for="home-location">Home location</label>
               </div>
               <input
                 type="text"
@@ -374,21 +341,15 @@
                 autocomplete="off"
               />
               <p class="hint">
-                Where “what is the weather” means, when the question does not say. Simplixity never
-                asks the browser for your location (geolocation is switched off for this
-                page), so this is the only place a default can come from. Left empty, a question without a place says so and
-                searches instead of guessing.
+                Used when a weather question names no place. Simplixity never asks the browser
+                for your location. Left empty, such a question searches instead of guessing.
               </p>
             </section>
           </div>
         </div>
-
-        <footer class="modal-foot">
-          <span class="save-state" id="settings-status"></span>
-        </footer>
       </div>
     </div>
 
-    <script type="module" src="/static/app.js"></script>
+    <script type="module" src="/static/js/app/app.js"></script>
   </body>
 </html>

@@ -3,7 +3,7 @@
 // What these pin is the contract the rest of the app leans on: a resolved
 // prompt is always a non-empty, trimmed string, and everything else, Escape,
 // the backdrop, Cancel, an empty field, resolves null and writes nothing. The
-// callers in `web/projects.js` do no validating of their own.
+// callers in `web/js/projects/projects.js` do no validating of their own.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import { installDom, find, withClass } from './dom.mjs';
 
 installDom();
-const { confirmDialog, promptDialog } = await import('../../web/dialog.js');
+const { confirmDialog, promptDialog } = await import('../../web/js/shared/dialog.js');
 
 /** The dialog currently on the page. */
 const open = () => document.body.children.at(-1);

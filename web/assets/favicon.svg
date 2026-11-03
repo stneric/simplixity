@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- The tab-sized cut of web/icon.svg, which carries the reasoning. Rounded
+  <!-- The tab-sized cut of web/assets/icon.svg, which carries the reasoning. Rounded
        here because nothing masks a favicon, and the glyph is filled rather than
        stroked like its UI cousin in icons.js: at 16px a 1.75 stroke silts up,
        a solid mark stays a mark. -->

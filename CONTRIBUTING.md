@@ -54,7 +54,7 @@ have, extend the stub.
   pure Python with no build step. There is deliberately no provider SDK.
 - **Frontend.** No framework, no build step, no CDN. Never assign `innerHTML`
   with anything derived from model output; build nodes with `createElement`
-  and `textContent`. Links go through `web/links.js`.
+  and `textContent`. Links go through `web/js/render/links.js`.
 - **Schema changes** are additive migrations in `app/store/db.py`.
 - **Prompts** all live in `app/agent/prompts.py`.
 - Typographic characters (’ “ ” — ×) in prose and prompts are intentional and
@@ -65,8 +65,8 @@ together. Where to make common changes:
 
 | Change | Where |
 |---|---|
-| A new block kind | `app/agent/blocks.py` and a renderer in `web/blocks.js` |
-| A new answer shape | a `Shape` in `app/agent/shapes.py`, its schema in `app/agent/widgets.py`, a renderer in `web/blocks.js` |
+| A new block kind | `app/agent/blocks.py` and a renderer in `web/js/render/blocks.js` |
+| A new answer shape | a `Shape` in `app/agent/shapes.py`, its schema in `app/agent/widgets.py`, a renderer in `web/js/render/blocks.js` |
 | A new search lens | `app/search/lenses.py`, and its engines in the SearXNG config in `docker-compose.yml` |
 | A depth preset | `app/agent/depth.py` (the UI reads it from `/api/depths`) |
 

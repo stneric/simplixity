@@ -4,9 +4,10 @@
 //
 // Writes are debounced and last-write-wins.
 
-import { ModelPicker } from './picker.js';
-import { loadDepths } from './depth.js';
-import { loadLenses } from './lenses.js';
+import { ModelPicker } from '../shared/picker.js';
+import { iconNode } from '../shared/icons.js';
+import { loadDepths } from '../chat/depth.js';
+import { loadLenses } from '../chat/lenses.js';
 
 const DEBOUNCE_MS = 400;
 
@@ -159,6 +160,7 @@ export class Settings {
 
         const mark = document.createElement('span');
         mark.className = 'lens-toggle-mark';
+        mark.append(iconNode('check', 14));
 
         row.append(text, mark);
         row.addEventListener('click', () => {

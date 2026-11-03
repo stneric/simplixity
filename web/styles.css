@@ -96,11 +96,11 @@ button:disabled { opacity: 0.4; cursor: default; }
 /* The state the page loads in is a fact, not a movement. Only once the shell
    has said it is ready does the sidebar animate, so the drawer no longer flies
    shut across the screen on every load. `.ready` lands a frame after the class
-   above (web/sidebar.js), which is long enough to keep the two apart. */
+   above (web/js/app/sidebar.js), which is long enough to keep the two apart. */
 .app.ready .sidebar { transition: margin-left 0.18s ease; }
 
-/* The same answer, one script earlier: web/boot.js puts this on <html> before
-   the first paint, and web/sidebar.js takes it off in the frame it applies the
+/* The same answer, one script earlier: web/js/app/boot.js puts this on <html> before
+   the first paint, and web/js/app/sidebar.js takes it off in the frame it applies the
    real state. Nothing else may hang off it.
 
    `.app` is in both selectors only for the weight it carries: the narrow-screen
@@ -439,7 +439,6 @@ html.boot-collapsed .app .scrim { display: none; }
   padding: 0 12px;
   flex: none;
 }
-.topbar-right { margin-left: auto; }
 
 /* Inside a project: where you are, the way out, and its model. */
 .project-bar {
@@ -558,11 +557,6 @@ html.boot-collapsed .app .scrim { display: none; }
   .project-home { padding: 4vh 14px 16px; }
 }
 
-.run-state { font-size: 12px; color: var(--fg-faint); text-transform: lowercase; }
-.run-state[data-state="live"] { color: var(--ok); }
-.run-state[data-state="reconnecting"] { color: var(--warn); }
-.run-state[data-state="idle"] { display: none; }
-
 .scroll { flex: 1; overflow-y: auto; scrollbar-gutter: stable; }
 
 .thread, .welcome { max-width: 46rem; margin: 0 auto; padding: 8px 24px; }
@@ -642,7 +636,7 @@ html.boot-collapsed .app .scrim { display: none; }
 }
 .chip[data-depth="balanced"] { color: var(--fg); }
 .chats-toggle[hidden] { display: none; }
-/* Attaching files (web/attachments.js): a round paperclip, then one chip per
+/* Attaching files (web/js/chat/attachments.js): a round paperclip, then one chip per
    file above the text, saying how much of it there is to search. */
 .attach-btn { width: 32px; padding: 0; justify-content: center; }
 .composer.dropping { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg-input)); }
@@ -863,11 +857,43 @@ button.msg-file { background: none; font: inherit; font-size: 12.5px; cursor: po
   padding: 12px 14px;
   background: var(--bg-elevated);
 }
-.sub-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-.sub-step { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-faint); }
-.sub-step.done { color: var(--fg-muted); }
+.sub-steps { list-style: none; margin: 0; padding: 2px 0; display: flex; flex-direction: column; }
+.sub-step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--fg-faint);
+}
+/* The rail between two marks: a run reads as one sequence, not a bullet list. */
+.sub-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 7.5px;
+  top: 21px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--line);
+}
+.sub-step.done, .sub-step.active { color: var(--fg-muted); }
+.sub-step.active .sub-step-text { color: var(--fg); }
+.sub-step.failed { color: var(--error); }
+.sub-step-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 18px;
+}
+.sub-step.done .sub-step-mark { color: var(--fg-faint); }
+.sub-step-mark .icon-slot { display: grid; place-items: center; }
+.sub-step-body { min-width: 0; display: flex; flex-direction: column; }
+.sub-step-detail { font-size: 12px; color: var(--fg-faint); }
 .sub-step .dot {
-  width: 5px; height: 5px; flex: none;
+  width: 6px; height: 6px;
   border-radius: 999px;
   background: currentColor;
 }
@@ -1267,7 +1293,7 @@ details[open] .source-card {
   font-size: 0.88em;
 }
 
-/* Math, typeset by web/tex.js. A real TeX font would violate the CSP, so the
+/* Math, typeset by web/js/render/tex.js. A real TeX font would violate the CSP, so the
    system serif in italics carries the math look; sub/sup do the layout. */
 .tex {
   font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", Georgia, serif;
@@ -1464,7 +1490,7 @@ details[open] .source-card {
 
 /* ── the tray ──────────────────────────────────────────────────────
    Under each answer, one row of icons for everything that is about the answer
-   rather than part of it (web/blocks.js, `TRAY`). The line each block used to
+   rather than part of it (web/js/render/blocks.js, `TRAY`). The line each block used to
    print is its tooltip; a click opens the block itself under the row. */
 .turn-tray { margin-top: 2px; }
 .turn-tray[hidden] { display: none; }
@@ -1595,31 +1621,38 @@ details[open] .source-card {
   color: var(--fg-faint);
 }
 
-/* The same toggles inside the settings modal, with room to be read. */
-.lens-settings { display: flex; flex-direction: column; gap: 4px; }
+/* The same toggles inside the settings modal: one list with hairlines between
+   rows, like the project page's lists, and a check where a box was. */
+.lens-settings {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
 .lens-toggle {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 9px 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  padding: 10px 12px;
   text-align: left;
+  transition: background 120ms ease;
 }
+.lens-toggle + .lens-toggle { border-top: 1px solid var(--line); }
 .lens-toggle:hover { background: var(--bg-hover); }
-.lens-toggle.on { border-color: var(--fg-muted); background: var(--bg-input); }
-.lens-toggle-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.lens-toggle-label { font-size: 13.5px; font-weight: 500; color: var(--fg); }
-.lens-toggle-desc { font-size: 12px; color: var(--fg-faint); line-height: 1.45; }
+.lens-toggle:focus-visible { outline: 2px solid var(--fg); outline-offset: -2px; }
+.lens-toggle-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.lens-toggle-label { font-size: 14px; color: var(--fg); }
+.lens-toggle-desc { font-size: 12.5px; color: var(--fg-muted); line-height: 1.45; }
 .lens-toggle-mark {
   flex: none;
-  width: 16px; height: 16px;
+  display: inline-flex;
   margin-left: auto;
-  border: 1.5px solid var(--line-strong);
-  border-radius: 5px;
+  color: var(--fg);
+  visibility: hidden;
 }
-.lens-toggle.on .lens-toggle-mark { background: var(--accent); border-color: var(--accent); }
+.lens-toggle.on .lens-toggle-mark { visibility: visible; }
 
 /* ── widgets ─────────────────────────────────────────────────────── */
 /* Built from a validated schema, so the layout can be committed to: every
@@ -1780,7 +1813,7 @@ details[open] .source-card {
 .weather-low { color: var(--fg-faint); }
 .weather-precip { font-size: 10.5px; color: var(--fg-faint); }
 
-/* Diagram: drawn by web/diagram.js, styled here so it follows the theme. */
+/* Diagram: drawn by web/js/render/diagram.js, styled here so it follows the theme. */
 .diagram-title { font-size: 13px; font-weight: 500; color: var(--fg-muted); margin-bottom: 10px; }
 .diagram-frame { overflow-x: auto; display: flex; justify-content: center; }
 .diagram-svg { display: block; }
@@ -2230,6 +2263,8 @@ details[open] .source-card {
 .picker-problems { border-top: 1px solid var(--line); text-align: left; }
 
 /* ── modal ───────────────────────────────────────────────────────── */
+/* The settings surface, drawn like the .confirm dialogs it sits beside: the
+   same blurred backdrop, no rules across the head or foot, one padding. */
 
 .overlay {
   position: fixed;
@@ -2237,89 +2272,93 @@ details[open] .source-card {
   z-index: 60;
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding: 16px;
   background: rgb(0 0 0 / 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 .overlay[hidden] { display: none; }
 
 .modal {
-  width: min(560px, 100%);
-  max-height: 86vh;
+  width: min(600px, 100%);
+  height: min(720px, calc(100svh - 32px));
   display: flex;
   flex-direction: column;
   background: var(--bg-elevated);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow);
+  overflow: hidden;
+  animation: confirm-in 130ms ease-out;
 }
 
 .modal-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
+  gap: 10px;
+  padding: 16px 14px 0 24px;
 }
-.modal-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.modal-head h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.45; }
+.modal-head .save-state { margin-left: auto; }
 
-.modal-body { padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 22px; }
+.modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 24px 24px;
+  overflow-y: auto;
+}
 
 /* ── settings tabs ───────────────────────────────────────────────── */
-/* The modal grew past the point where one scroll held it: three model
-   pickers, two toggles, a select, a text field and the corpus list read as a
-   pile rather than as decisions with somewhere to belong. */
+/* A segmented control rather than underlined tabs: three short words, and the
+   same pill-in-a-well the composer's switches use. */
 
 .tabstrip {
   display: flex;
   gap: 2px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--line);
+  margin: 14px 24px 8px;
+  padding: 3px;
+  background: var(--bg-input);
+  border-radius: var(--r-md);
 }
 .tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 12px;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--fg-faint);
-  font: inherit;
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  color: var(--fg-muted);
   font-size: 13px;
-  cursor: pointer;
-  /* The strip must not shift when the label goes semibold on selection. */
-  transition: color 0.12s ease, border-color 0.12s ease;
+  font-weight: 500;
+  transition: color 0.12s ease, background 0.12s ease;
 }
-.tab:hover { color: var(--fg-muted); }
+.tab:hover { color: var(--fg); }
 .tab[aria-selected='true'] {
   color: var(--fg);
-  border-bottom-color: var(--fg);
-  font-weight: 500;
+  background: var(--bg-elevated);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+/* On dark the well is lighter than the modal, so the pill steps up, not down. */
+@media (prefers-color-scheme: dark) {
+  .tab[aria-selected='true'] { background: var(--bg-active); box-shadow: none; }
 }
 .tab:focus-visible { outline: 2px solid var(--fg); outline-offset: -2px; }
-.tab .icon-slot { opacity: 0.75; }
-.tab[aria-selected='true'] .icon-slot { opacity: 1; }
 
-.tab-panel { display: flex; flex-direction: column; gap: 22px; }
+.tab-panel { display: flex; flex-direction: column; }
 .tab-panel[hidden] { display: none; }
+
+/* One setting per section, divided by hairlines: a list of decisions, not a
+   stack of boxes. */
+.modal .field { padding: 18px 0; }
+.modal .field + .field { border-top: 1px solid var(--line); }
+.modal .field:last-child { padding-bottom: 4px; }
 
 .field-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
+  min-height: 24px;
+  margin-bottom: 10px;
 }
-.field-head label { font-size: 13px; font-weight: 500; }
-/* The icon rides with the words rather than in a column of its own: a settings
-   modal is read down the labels, and an icon gutter makes every label start
-   further right for no gain. */
-.field-head > label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-.field-head > label .icon-slot { color: var(--fg-faint); }
+.field-head > label { font-size: 14px; font-weight: 500; color: var(--fg); }
 
 .ghost-btn {
   display: inline-flex;
@@ -2333,6 +2372,8 @@ details[open] .source-card {
 .ghost-btn:hover { background: var(--bg-hover); color: var(--fg); }
 
 .hint { margin: 8px 0 0; font-size: 12px; color: var(--fg-faint); line-height: 1.5; }
+.modal .hint { margin-top: 10px; font-size: 12.5px; color: var(--fg-muted); line-height: 1.55; }
+.modal .hint strong { color: var(--fg); font-weight: 500; }
 
 .select,
 .text-input {
@@ -2348,6 +2389,32 @@ details[open] .source-card {
 .text-input:focus-visible { outline: none; border-color: var(--line-strong); }
 .text-input::placeholder { color: var(--fg-faint); }
 
+/* The native select, dressed as the model pickers above it: same border,
+   radius and caret, so the two read as one kind of control. */
+.select-wrap { position: relative; }
+.select-wrap::after {
+  content: '▾';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--fg-faint);
+  pointer-events: none;
+}
+.select-wrap .select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 6px 30px 6px 9px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+.modal .select:hover,
+.modal .text-input:hover { border-color: var(--line-strong); }
+.modal .select:focus-visible,
+.modal .text-input:focus-visible { outline: none; border-color: var(--fg-muted); }
+.modal .text-input { padding: 6px 9px; }
+
 .switch { position: relative; display: inline-flex; }
 /* A bare switch says nothing about which way is on. The caption is not
    decoration: it says what "on" means. */
@@ -2361,34 +2428,32 @@ details[open] .source-card {
 }
 .switch.labelled:has(input:checked) .switch-text { color: var(--fg-muted); }
 .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+/* Monochrome, like every other on-state in the app: colour is kept for claims
+   about a source, not for chrome. */
 .track {
-  width: 34px; height: 20px;
+  width: 30px; height: 18px;
   padding: 2px;
-  background: var(--bg-active);
+  background: var(--line-strong);
   border-radius: 999px;
   transition: background 0.15s ease;
 }
 .thumb {
   display: block;
-  width: 16px; height: 16px;
-  background: var(--bg);
+  width: 14px; height: 14px;
+  background: #ffffff;
   border-radius: 999px;
-  transition: transform 0.15s ease;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  transition: transform 0.15s ease, background 0.15s ease;
 }
-.switch input:checked + .track { background: var(--ok); }
-.switch input:checked + .track .thumb { transform: translateX(14px); }
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track .thumb { transform: translateX(12px); background: var(--accent-fg); }
 .switch input:focus-visible + .track { outline: 2px solid var(--fg); outline-offset: 2px; }
 
-.modal-foot {
-  padding: 10px 16px;
-  border-top: 1px solid var(--line);
-  min-height: 40px;
-}
 .save-state { font-size: 12px; color: var(--fg-faint); }
 .save-state.error { color: var(--error); }
 
 /* ── keycaps and tooltips ────────────────────────────────────────── */
-/* Both are printed from the same table the matcher reads (web/shortcuts.js),
+/* Both are printed from the same table the matcher reads (web/js/shared/shortcuts.js),
    and both start hidden: a keycap is a promise about a keyboard, and on a phone
    there is none to press. `hover: hover and pointer: fine` is the closest thing
    the platform offers to "has a keyboard", and it is the right shape of wrong,
@@ -2473,7 +2538,7 @@ details[open] .source-card {
 
 /* ── confirm and prompt dialogs ──────────────────────────────────── */
 /* Native <dialog>, so the backdrop, focus trap and Escape come from the
-   platform and only the surface is ours. See web/dialog.js. */
+   platform and only the surface is ours. See web/js/shared/dialog.js. */
 
 .confirm {
   width: min(400px, calc(100vw - 32px));
@@ -2768,7 +2833,7 @@ html[data-standalone] body { overscroll-behavior-y: none; }
 
 /* ── tools ───────────────────────────────────────────────────────── */
 /* The menu is a .confirm dialog with a list in it; each tool brings its own,
-   larger dialog. See web/tools.js. */
+   larger dialog. See web/js/tools/tools.js. */
 
 .tool-options { display: grid; gap: 6px; margin-top: 14px; }
 .tool-option {
@@ -2892,7 +2957,7 @@ html[data-standalone] body { overscroll-behavior-y: none; }
 }
 
 /* The part the model is reading now, and the log of the parts it has read: see
-   the progress step in web/redact-view.js for why both exist. */
+   the progress step in web/js/tools/redact-view.js for why both exist. */
 .redact-current {
   display: grid;
   gap: 4px;
@@ -3075,7 +3140,7 @@ html[data-standalone] body { overscroll-behavior-y: none; }
 .redact-output > .hint { margin: 0; }
 .redact-output > .hint[hidden] { display: none; }
 
-/* The original text, never the output: see web/redact-view.js. Wrapped as the
+/* The original text, never the output: see web/js/tools/redact-view.js. Wrapped as the
    document was, so a contract's layout survives. */
 .redact-doc {
   overflow: auto;

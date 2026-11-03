@@ -5,7 +5,7 @@
 // has selected, plus every open <details>. So the view keeps a node per block
 // id and re-renders only the ones whose data actually changed.
 
-import { iconNode } from './icons.js';
+import { iconNode } from '../shared/icons.js';
 import { citeLink, outbound, safeUrl, sourceUrl } from './links.js';
 import { citedText, paperNumbers, renderMarkdown } from './markdown.js';
 import { renderDiagram } from './diagram.js';
@@ -69,7 +69,16 @@ export const renderers = {
     const list = el('ul', 'sub-steps');
     for (const step of steps) {
       const item = el('li', `sub-step ${step.status ?? ''}`);
-      item.append(el('span', 'dot'), el('span', 'sub-step-text', step.text));
+      // A tick for what is finished, a cross for what failed, a pulsing dot
+      // for what is still running: the state reads before the words do.
+      const mark = el('span', 'sub-step-mark');
+      if (step.status === 'done') mark.append(iconNode('check', 12));
+      else if (step.status === 'failed') mark.append(iconNode('close', 12));
+      else mark.append(el('span', 'dot'));
+      const body = el('div', 'sub-step-body');
+      body.append(el('span', 'sub-step-text', step.text));
+      if (step.detail) body.append(el('span', 'sub-step-detail', step.detail));
+      item.append(mark, body);
       list.append(item);
     }
 

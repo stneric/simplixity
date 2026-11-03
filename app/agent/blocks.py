@@ -146,6 +146,11 @@ def set_sub_step_text(index: int, text: str) -> dict[str, Any]:
     return replace(f"/data/sub_steps/{index}/text", text)
 
 
+def set_sub_step_detail(index: int, detail: str) -> dict[str, Any]:
+    """The quieter second line under a step: which engines, which window."""
+    return add(f"/data/sub_steps/{index}/detail", detail)
+
+
 def set_status(status: str) -> dict[str, Any]:
     return replace("/data/status", status)
 

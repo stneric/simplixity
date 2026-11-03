@@ -1,4 +1,4 @@
-<img src="web/icon.svg" alt="" width="72" height="72">
+<img src="web/assets/icon.svg" alt="" width="72" height="72">
 
 # Simplixity
 

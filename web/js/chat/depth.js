@@ -3,7 +3,7 @@
 // The presets come from /api/depths (the same definitions the agent runs on),
 // so the descriptions here cannot drift away from what the backend does.
 
-import { icon } from './icons.js';
+import { icon } from '../shared/icons.js';
 
 const ICONS = { auto: 'spark', quick: 'zap', balanced: 'gauge', deep: 'telescope' };
 

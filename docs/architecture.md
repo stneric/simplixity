@@ -68,7 +68,7 @@ event id (`app/store/stream.py`). When the connection drops, the browser's
 client-side state machine, no in-memory replay buffer. A reload, a sleeping
 laptop or a network change all resume the same way.
 
-`web/sse.js` coalesces renders to one per animation frame, so rejoining a long
+`web/js/chat/sse.js` coalesces renders to one per animation frame, so rejoining a long
 run does not re-render once per replayed event.
 
 ## Block protocol
@@ -86,14 +86,14 @@ done   {status, …}            terminal
 Ops are the RFC 6902 subset `add`, `replace`, `remove`, plus `append` for
 streamed text, since resending the whole answer on every token would be
 wasteful (`store.stream.apply_patch`). Block kinds and phase names are defined
-in `app/agent/blocks.py`; each kind has a renderer in `web/blocks.js`.
+in `app/agent/blocks.py`; each kind has a renderer in `web/js/render/blocks.js`.
 
 Anything that has to outlive the run must be a block. `done` is not persisted
 and the stream expires after a day, so the run footer (`provenance`) and the
 reason a run failed (`notice`) are blocks. Reopening a chat a week later shows
 which engines were used and why a run stopped.
 
-`web/blocks.js` keeps one DOM node per block id and re-renders only what
+`web/js/render/blocks.js` keeps one DOM node per block id and re-renders only what
 changed. Replacing everything on every patch would destroy text selection and
 close open `<details>` several times a second while an answer streams.
 
@@ -161,7 +161,7 @@ and a panel is composed from those, every item cited on its own. Like the
 explainer diagram it is optional; if it fails, the prose is unaffected. The
 writer is told what the panel holds so it does not repeat it. Adding a facet
 takes a `Facet` in `shapes.py`, an entry in `prompts.OVERVIEW_FACETS`, a rule in
-`widgets._COMPLETE` and a renderer in `overviewSections` in `web/blocks.js`.
+`widgets._COMPLETE` and a renderer in `overviewSections` in `web/js/render/blocks.js`.
 
 All prompts are in `app/agent/prompts.py`, so they can be read side by side.
 
@@ -249,7 +249,7 @@ Chats, projects and settings belong to a profile (`app/store/profiles.py`),
 optionally protected by a scrypt-hashed password. `POST /api/profiles/login`
 sets a signed session cookie; `api.deps.current_user` verifies it and answers
 401 without one, which is the frontend's cue to show the profile picker
-(`web/profile.js`). The signature covers the password hash, so changing a
+(`web/js/shared/profile.js`). The signature covers the password hash, so changing a
 password ends other sessions.
 
 Store functions take a `user=` argument. Every route passes the profile;
@@ -307,10 +307,10 @@ they are, and the Content Security Policy allows only `'self'`. File names are
 not hashed, so the server sends `no-cache, must-revalidate` and the service
 worker fetches network-first.
 
-The markdown renderer (`web/markdown.js`) never assigns `innerHTML`. It builds
+The markdown renderer (`web/js/render/markdown.js`) never assigns `innerHTML`. It builds
 DOM nodes with `createElement` and `textContent`, so model output cannot become
 markup and there is nothing to sanitise. The TeX and diagram renderers follow
-the same rule. Every outbound link and citation goes through `web/links.js`,
+the same rule. Every outbound link and citation goes through `web/js/render/links.js`,
 which checks the URL scheme and opens the link in a new tab with `noopener`.
 
 Under each answer sits the *tray*: one row of icons for what is about the

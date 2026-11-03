@@ -61,7 +61,7 @@ async def search_and_register(
         )
         ctx.budget.searches += len(queries)
         registered, dropped = await register(ctx, results, question, own=own)
-        step.text = _searched_label(len(queries), len(registered), report, dropped)
+        step.text, step.detail = _searched_label(len(queries), len(registered), report, dropped)
 
     if not registered and not len(ctx.sources):
         # A source-bound run says this once, where it decides not to write.
@@ -153,25 +153,53 @@ def _mostly_refused(ctx: RunContext, report: SearchReport) -> bool:
     return len(report.engine_names) <= 1 and len(refused) >= 2
 
 
-def _searched_label(queries: int, found: int, report: SearchReport, dropped: int = 0) -> str:
-    """What the run actually did, engines named.
+def _searched_label(
+    queries: int, found: int, report: SearchReport, dropped: int = 0
+) -> tuple[str, str]:
+    """What the run actually did, and which engines did it.
 
     The user should never have to guess which search engine produced an answer,
     and the research block is where they are already looking. Discards are
-    reported too: silently dropping half the results is the kind of judgement
-    that should be visible when it goes wrong.
+    reported too, as the share kept: silently dropping half the results is the
+    kind of judgement that should be visible when it goes wrong. The engines go
+    on the quieter second line, so the first one reads as a sentence.
     """
-    text = f"Searched {_plural(queries, 'query', 'queries')} · {_plural(found, 'result')}"
+    kept = _plural(found, "relevant result")
     if dropped:
-        text = f"{text} ({dropped} off-topic dropped)"
+        kept = f"{found} of {found + dropped} results relevant"
+    text = f"{_plural(queries, 'search', 'searches')} · {kept}"
+    parts = []
     engines = report.engine_names[:4]
     if engines:
         more = len(report.engine_names) - len(engines)
-        listed = ", ".join(engines) + (f" +{more}" if more > 0 else "")
-        text = f"{text} · {listed}"
+        listed = ", ".join(_engine(name) for name in engines)
+        parts.append(f"{listed} +{more}" if more > 0 else listed)
     if report.time_range:
-        text = f"{text} · past {report.time_range}"
-    return text
+        parts.append(f"past {report.time_range}")
+    return text, " · ".join(parts)
+
+
+# SearXNG names its engines in lower case. Most read fine capitalised; these do not.
+_ENGINE_NAMES = {
+    "duckduckgo": "DuckDuckGo",
+    "arxiv": "arXiv",
+    "pubmed": "PubMed",
+    "github": "GitHub",
+    "stackoverflow": "Stack Overflow",
+    "youtube": "YouTube",
+    "openalex": "OpenAlex",
+    "crossref": "Crossref",
+}
+
+
+def _engine(name: str) -> str:
+    """An engine as a person would write it. Names that already carry capitals
+    (the library's label) are left alone."""
+    if name != name.lower():
+        return name
+    if name in _ENGINE_NAMES:
+        return _ENGINE_NAMES[name]
+    return " ".join(w.upper() if len(w) <= 3 else w.capitalize() for w in name.split())
 
 
 def _nothing_found(ctx: RunContext, report: SearchReport) -> str:
@@ -256,7 +284,11 @@ async def read_pages(
 
     async with steps(f"Reading {_plural(len(targets), 'page')}") as step:
         fetched = await fetch(ctx, targets)
-        step.text = f"Read {fetched} of {_plural(len(targets), 'page')}"
+        step.text = (
+            f"Read {_plural(fetched, 'page')}"
+            if fetched == len(targets)
+            else f"Read {fetched} of {_plural(len(targets), 'page')}"
+        )
         if not fetched:
             step.text = "Could not read any pages; using search snippets"
 
@@ -301,14 +333,19 @@ async def read_cited(
     # two groups become indistinguishable afterwards.
     already = sum(1 for index in cited if by_index[index].content)
 
-    async with steps(f"Reading {_plural(len(targets), 'page')} the answer will cite") as step:
+    async with steps(f"Reading {_plural(len(targets), 'more page')} the answer will cite") as step:
         fetched = await fetch(ctx, targets)
-        # Against the whole cited set, not against this pass. `read_pages` has
-        # usually opened most of them already, and reporting only the top-up
-        # reads as "the answer cites one page", which is the opposite of what
-        # this step is for.
+        # Said as the top-up it is, then against the whole cited set. A bare
+        # "Read 8 of 8" under "Read 5 pages" reads as a contradiction; only the
+        # top-up reads as "the answer cites one page". Both together say it.
+        read = already + fetched
+        whole = (
+            f"all {len(cited)} cited sources read in full"
+            if read == len(cited)
+            else f"{read} of {len(cited)} cited sources read in full"
+        )
         step.text = (
-            f"Read {already + fetched} of {_plural(len(cited), 'cited page')} in full"
+            f"Read {_plural(fetched, 'more page')} · {whole}"
             if fetched
             else f"Could not open {_plural(len(targets), 'cited page')}; citing the snippet"
         )

@@ -21,8 +21,8 @@ const PRECACHE = [
   '/static/styles.css',
   // Parser-blocking, so offline it is the difference between painting the shell
   // and waiting on a request that will not answer.
-  '/static/boot.js',
-  '/static/app.js',
+  '/static/js/app/boot.js',
+  '/static/js/app/app.js',
   '/favicon.svg',
 ];
 

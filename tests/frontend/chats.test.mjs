@@ -12,7 +12,7 @@ import { test } from 'node:test';
 import { installDom } from './dom.mjs';
 
 installDom();
-const { bucket } = await import('../../web/chats.js');
+const { bucket } = await import('../../web/js/chat/chats.js');
 
 /** Local midnight plus `hour`, `days` ago. The calendar case, unaffected by
  *  what time the test happens to run. Anchoring on wall-clock offsets instead

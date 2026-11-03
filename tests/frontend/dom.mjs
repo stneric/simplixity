@@ -1,4 +1,4 @@
-// The smallest DOM that `web/markdown.js`, `web/blocks.js` and the two drawing
+// The smallest DOM that `web/js/render/markdown.js`, `web/js/render/blocks.js` and the two drawing
 // modules need.
 //
 // A real headless browser would test more, but it would also be a toolchain.
@@ -98,7 +98,7 @@ class Element {
     for (const handler of this.listeners[type] ?? []) handler({ target: this, ...event });
   }
 
-  /** Just enough <dialog> for `web/dialog.js`: it opens one, reads
+  /** Just enough <dialog> for `web/js/shared/dialog.js`: it opens one, reads
    *  `returnValue` on close, and resolves from the close event. The focus
    *  calls are no-ops here but are what a browser would need to have. */
   showModal() {

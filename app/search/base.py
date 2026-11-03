@@ -71,7 +71,7 @@ class SearchResult:
     content: str = field(default="", repr=False)
     # For a page of the person's papers: the passages of it the answer was
     # written from, and the exact words of it the citation check found carrying
-    # a claim. Both are highlighted in the reader (web/reader.js).
+    # a claim. Both are highlighted in the reader (web/js/reader/reader.js).
     passages: list[str] = field(default_factory=list, repr=False)
     evidence_texts: list[str] = field(default_factory=list, repr=False)
     # For a page of the person's papers: the page cut into the passages it was
@@ -85,7 +85,7 @@ class SearchResult:
     # For a page of the person's papers: how a thesis names the work, "Vaswani
     # et al. 2017", or a file's name. The prose cites such a page as
     # "[Vaswani et al. 2017, S. 5]" rather than as a bare number, because that
-    # is the form the reader will copy into their own text (web/markdown.js).
+    # is the form the reader will copy into their own text (web/js/render/markdown.js).
     byline: str = ""
 
     @property
