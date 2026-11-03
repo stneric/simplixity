@@ -5,6 +5,7 @@
 <h1 align="center">Simplixity</h1>
 
 <p align="center">
+  <a href="https://github.com/stneric/simplixity/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/stneric/simplixity/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=1a1a1a&color=1a1a1a&logo=githubactions&logoColor=white" alt="CI"></a>
   <img src="https://img.shields.io/badge/Python-3.12%2B-1a1a1a?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/FastAPI-1a1a1a?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
   <img src="https://img.shields.io/badge/Redis-1a1a1a?style=for-the-badge&logo=redis&logoColor=white" alt="Redis">
@@ -220,11 +221,13 @@ answers with what it has. The presets live in
 
 ```bash
 uv sync
-uv run pytest                            # backend, ~650 tests, no network
-node --test "tests/frontend/*.test.mjs"  # frontend, ~190 tests, no browser or npm
+uv run pytest                            # backend, no network
+node --test "tests/frontend/*.test.mjs"  # frontend, no browser or npm
 uv run ruff check app tests
 uv run ruff format app tests
 ```
+
+AI was used for refactoring, code review and debugging, and to write the tests.
 
 ## Limitations
 

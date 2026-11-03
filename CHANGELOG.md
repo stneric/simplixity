@@ -22,6 +22,6 @@ include breaking changes, which are called out.
   orange with the number of problems, light green when every statement held,
   grey when it did not run. While it runs, the eye animates in the icon.
 
-## 0.1.0
+## 0.1.0 (2026-11-02)
 
 First public release.
