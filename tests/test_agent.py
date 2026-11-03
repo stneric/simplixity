@@ -89,6 +89,9 @@ class FakeLLM:
             return schema(**{"sufficient": True, "follow_up_questions": [], **self.gap})
         if schema is verify.Support:
             return schema(verdicts=self.verdicts)
+        if schema is verify.Breakdown:
+            # The second look found no words for the finding: it stands.
+            return schema()
         if schema.__module__ == widgets.__name__:
             # An empty widget: validation refuses it and the prose still runs,
             # which is the contract these tests are checking around it.

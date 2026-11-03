@@ -702,21 +702,33 @@ sound right" makes the result worthless.
 
   - "supported": the cited sources state this, or it follows from them
     directly. A claim written in the reader's words rather than the source's is
-    still supported; you are checking substance, not wording.
-  - "partial": some of it is in the cited sources and some is not. A figure
-    without the qualifier the source attached to it, a general statement drawn
-    from one specific case, an attribution the source does not make, a date the
-    source never gives.
+    still supported; you are checking substance, not wording. "No horizontal
+    scaling across machines" supports "scaling is strictly vertical"; a
+    summary, a synonym or the same fact seen from the other side is the source
+    saying it.
+  - "partial": a concrete, material part of the claim is in none of the cited
+    sources, or one of them contradicts it. A figure without the qualifier the
+    source attached to it, a general statement drawn from one specific case,
+    an attribution the source does not make, a date the source never gives.
   - "unsupported": the cited sources do not state this at all.
 
-A claim citing several sources is supported when *any one* of them carries it.
+Read a claim's cited sources together. A sentence that cites [2] and [5] is
+usually built from both: it is supported when every part of it is carried by
+one of them, even if no single source carries the whole sentence. A part
+found in another cited source is never missing.
+
+Before you rule "partial" or "unsupported", look for the missing part once more
+in every source the claim cites, and name it in `note`. If you cannot name a
+specific statement that none of them makes, the claim is supported. Wording,
+emphasis and ordinary summarising are not findings.
+
 Sources are provided as full pages where the run read them and as search
 snippets where it did not; a snippet that plainly states the claim supports it,
 but a snippet that merely touches the subject does not.
 
-`note` is one short clause naming what is missing, and only for "partial" and
-"unsupported". Leave it empty for "supported"; a note there is noise on the
-ordinary case.
+`note` is one short clause naming the part that no cited source states, and
+only for "partial" and "unsupported". Leave it empty for "supported"; a note
+there is noise on the ordinary case.
 
 `evidence`, for "supported" and "partial": the words in the source that carry
 the claim, copied exactly as they appear there, in the source's language, one
@@ -724,6 +736,41 @@ sentence or a part of one, at most 40 words. It is searched for in the source
 character by character and shown to the reader, highlighted in place, so never
 paraphrase, translate or join words from two places. Empty if you cannot copy
 it exactly."""
+
+
+VERIFY_PARTS = """\
+A sentence from an answer is below, with the sources it cites. Split the
+sentence into the separate statements it makes, and for each one copy the
+words from the cited sources that state it.
+
+`parts`: every statement the sentence makes, together covering all of it, each
+in the sentence's own words. Split only where the sentence asserts two things;
+a qualifier stays with what it qualifies. Do not leave out the part that is
+hardest to find.
+
+`quote`, for each part: the words in one of the cited sources that state it,
+copied exactly as they appear there, in the source's language, one sentence or
+a part of one. A source that says the same thing in other words counts, so
+copy those words: "impractical as a general technique" states "performs poorly
+as a general method". Empty only when no cited source says it at all; never
+paraphrase, translate or join words from two places, since every quote is
+searched for in the source and a quote that is not there counts as empty.
+
+`source`: the number of the source the quote is from."""
+
+
+def verify_parts(question: str, claim: Any, evidence: str) -> list[Message]:
+    cites = ", ".join(f"[{n}]" for n in claim.sources)
+    return [
+        _system(VERIFY_PARTS, IN_ENGLISH, _today()),
+        {
+            "role": "user",
+            "content": (
+                f"Question the answer was written for: {question}\n\n{evidence}\n\n"
+                f"## Sentence\n\n{claim.text}\n   cites: {cites}{_quoted(claim)}"
+            ),
+        },
+    ]
 
 
 def _quoted(claim: Any) -> str:

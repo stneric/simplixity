@@ -958,15 +958,39 @@ const PHASE_LABELS = {
 // icon's tooltip, and a click opens the block itself below the row, one at a
 // time.
 //
-// Only what is fine goes there. Whatever the reader has to see, a citation
-// check that found something, a check that could not run, a notice, stays in
-// the transcript as text: an icon is where a finding goes to be missed.
+// The citation check is the one icon that carries its verdict on its face, so
+// a finding is never a grey icon among grey icons: orange with the number of
+// problems beside it, light green when every cited statement held, grey when
+// no verdict exists. While it runs, the eye reads in the icon itself, with a
+// word beside it, rather than in a line the icon row sits in front of.
 
-/** Whether a citation check has something the reader must see. */
-function needsReader(data) {
-  if (['uncited', 'failed', 'skipped'].includes(data.status)) return true;
-  if ((data.uncited ?? []).length) return true;
-  return (data.claims ?? []).some((c) => c.verdict === 'partial' || c.verdict === 'unsupported');
+/** The citation check's icon: its tone, the count on its pill, and while it
+ *  runs the word beside it. Green only when every statement was checked and
+ *  held; a check that left some unchecked has not earned it. */
+function verifyState(data) {
+  if (data.status === 'active') return { tone: 'checking', icon: 'eye', label: 'Checking' };
+  if (data.status === 'uncited') return { tone: 'warn', icon: 'alert' };
+  if (data.status === 'failed' || data.status === 'skipped') return { tone: 'off', icon: 'shield' };
+  const claims = data.claims ?? [];
+  const problems =
+    claims.filter((c) => c.verdict === 'partial' || c.verdict === 'unsupported').length +
+    (data.uncited ?? []).length;
+  if (problems) return { tone: 'warn', icon: 'alert', count: problems };
+  const checked = claims.length > 0 && claims.every((c) => c.verdict === 'supported');
+  return { tone: checked ? 'ok' : 'off', icon: 'shield' };
+}
+
+/** The tooltip of the citation check's icon. */
+function verifyTitle(data) {
+  if (data.status === 'active') return 'Checking the answer against its sources';
+  if (data.status === 'uncited') return 'This answer cites no sources, so nothing in it could be checked';
+  if (data.status === 'skipped') return 'No budget left for the citation check. This answer is unchecked.';
+  if (data.status === 'failed') return 'The citation check could not run. This answer is unchecked.';
+  const uncited = (data.uncited ?? []).length;
+  const claims = data.claims ?? [];
+  if (!uncited) return verifyLine(data);
+  const head = claims.length ? verifyLine(data) : 'Nothing in this answer cites your papers';
+  return `${head} · ${plural(uncited, 'sentence')} without a source`;
 }
 
 /** Per block kind: its icon, whether it belongs in the tray yet, and the line
@@ -1001,8 +1025,9 @@ const TRAY = {
   },
   verification: {
     icon: 'shield',
-    when: (d, settled) => !needsReader(d) && (settled || d.status !== 'active'),
-    title: (d) => verifyLine(d),
+    when: () => true,
+    title: verifyTitle,
+    state: verifyState,
   },
   provenance: {
     icon: 'gauge',
@@ -1176,7 +1201,9 @@ export class BlockView {
       if (chip !== block.id || seen.has(chip)) continue;
       seen.add(chip);
       const spec = TRAY[block.type];
-      chips.push(this.#chip(chip, spec.icon, spec.title(block.data ?? {})));
+      const data = block.data ?? {};
+      const state = spec.state?.(data);
+      chips.push(this.#chip(chip, state?.icon ?? spec.icon, spec.title(data), undefined, state));
     }
     if (this.meta) chips.push(this.#chip('#meta', 'clock', this.meta.text, this.meta.title));
     const ids = new Set(chips.map((chip) => chip.dataset.chip));
@@ -1209,7 +1236,7 @@ export class BlockView {
     this.trayPanel.hidden = !this.openChip;
   }
 
-  #chip(id, icon, label, title = label) {
+  #chip(id, icon, label, title = label, state = null) {
     let button = this.chips.get(id);
     if (!button) {
       button = el('button', 'tray-chip');
@@ -1219,9 +1246,25 @@ export class BlockView {
       button.addEventListener('click', () => this.#press(id));
       this.chips.set(id, button);
     }
+    if (state) this.#paint(button, icon, state);
     button.title = title;
     button.setAttribute('aria-label', label);
     return button;
+  }
+
+  /** A chip that carries its block's state: tone, pill, word. Rebuilt only
+   *  when the state changes, so the eye's animation is not restarted by every
+   *  patch that arrives while the check runs. */
+  #paint(button, icon, { tone, count = 0, label = '' }) {
+    const key = `${icon}|${tone}|${count}|${label}`;
+    if (button.dataset.state === key) return;
+    button.dataset.state = key;
+    for (const name of ['checking', 'ok', 'warn', 'off']) button.classList.toggle(name, name === tone);
+    button.classList.add('stateful');
+    const parts = [iconNode(icon, 15)];
+    if (label) parts.push(el('span', 'tray-chip-label', label));
+    if (count) parts.push(el('span', 'tray-count', String(count)));
+    button.replaceChildren(...parts);
   }
 
   #press(id) {

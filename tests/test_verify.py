@@ -321,16 +321,24 @@ class BatchLLM:
     model = "fake/model"
     is_local = False
 
-    def __init__(self, fail_on: int | None = None):
+    def __init__(self, fail_on: int | None = None, *, fail_if: str = "", always: bool = False):
         self.batch_sizes: list[int] = []
+        self.max_tokens: list[int | None] = []
         self.fail_on = fail_on
+        self.fail_if = fail_if
+        self.always = always
 
     async def structured(self, messages, schema, **kwargs):
         prompt = messages[-1]["content"]
         listed = prompt.partition("## Claims to check")[2]
         size = len(re.findall(r"^\d+\. ", listed, re.MULTILINE))
         self.batch_sizes.append(size)
-        if self.fail_on is not None and len(self.batch_sizes) == self.fail_on:
+        self.max_tokens.append(kwargs.get("max_tokens"))
+        if (
+            self.always
+            or (self.fail_on is not None and len(self.batch_sizes) == self.fail_on)
+            or (self.fail_if and self.fail_if in listed)
+        ):
             raise LLMError("provider fell over")
         return verify.Support(
             verdicts=[verify.Verdict(claim=n, verdict="supported") for n in range(1, size + 1)]
@@ -380,15 +388,55 @@ async def test_a_long_answer_is_checked_past_the_first_call(redis):
     assert llm.batch_sizes == [14, 9]
 
 
-async def test_the_check_cannot_outgrow_the_answer_it_checks(redis):
-    """A pathological answer must not turn the verification into the most
-    expensive thing in the run; what the ceiling does not reach is reported."""
+async def test_every_claim_of_a_long_answer_is_checked(redis):
+    """The bug this closes: three calls were the ceiling, so an answer with more
+    cited sentences than three batches hold ended on claims nobody ruled on."""
     llm = BatchLLM()
     _ctx, data = await verified(redis, llm, count=60)
 
-    assert len(llm.batch_sizes) == verify.MAX_JUDGE_CALLS
-    assert data["checked"] == verify.JUDGED_LIMIT * verify.MAX_JUDGE_CALLS
-    assert data["unchecked"] == 60 - data["checked"]
+    assert llm.batch_sizes == [14, 14, 14, 14, 4]
+    assert data["checked"] == 60
+    assert data["unchecked"] == 0
+
+
+async def test_the_reply_has_room_for_every_verdict_in_the_batch(redis):
+    """The bug this closes: fourteen verdicts, each with the source's words
+    copied as evidence, were given 1600 tokens. The reply was cut off
+    mid-object and the check reported "14 of 38"."""
+    llm = BatchLLM()
+    await verified(redis, llm, count=14)
+
+    assert llm.max_tokens[0] >= verify.JUDGED_LIMIT * verify.PER_VERDICT_TOKENS
+
+
+async def test_a_check_started_at_the_end_of_the_budget_still_runs(redis):
+    """The check gets its own allowance: an answer that used up the preset's
+    calls is the long one, and the one most worth checking."""
+    from app.agent import depth as depth_module
+    from app.agent.budget import Budget
+    from app.agent.context import RunContext, SourceRegistry
+    from app.store.stream import RunStream
+
+    preset = depth_module.get("deep")
+    stream = RunStream(redis, "v3", ttl=60)
+    registry = SourceRegistry(stream, preset.max_sources)
+    await registry.add([SearchResult(title="Source 1", url="https://s1.test/p")])
+    budget = Budget(preset)
+    budget.llm_calls = preset.max_llm_calls
+    llm = BatchLLM()
+    ctx = RunContext(
+        stream=stream,
+        llm=llm,
+        router=None,
+        depth=preset,
+        budget=budget,
+        sources=registry,
+        query="q",
+    )
+
+    data = await verify.check(ctx, "q", answer_of(38), [passage(1)])
+
+    assert data["checked"] == 38
 
 
 async def test_a_batch_that_runs_out_of_budget_leaves_the_rest_unchecked(redis):
@@ -405,9 +453,18 @@ async def test_a_batch_that_runs_out_of_budget_leaves_the_rest_unchecked(redis):
     stream = RunStream(redis, "v2", ttl=60)
     registry = SourceRegistry(stream, preset.max_sources)
     await registry.add([SearchResult(title="Source 1", url="https://s1.test/p")])
-    budget = Budget(preset)
-    # One call left before the ceiling, so the second batch is unaffordable.
-    budget.llm_calls = preset.max_llm_calls - 1
+
+    class Running(Budget):
+        """Out of time after the first batch: the check's own opening question
+        and the first batch's are answered yes, every later one no."""
+
+        asked = 0
+
+        def can_verify(self) -> bool:
+            self.asked += 1
+            return self.asked <= 2
+
+    budget = Running(preset)
     ctx = RunContext(
         stream=stream,
         llm=llm,
@@ -426,26 +483,180 @@ async def test_a_batch_that_runs_out_of_budget_leaves_the_rest_unchecked(redis):
     assert data["total"] == 23
 
 
-async def test_a_later_batch_failing_keeps_the_verdicts_already_in_hand(redis):
-    """The first fourteen were ruled on by a model that answered. Throwing them
-    away because the second call fell over reports less than the run knows."""
+async def test_a_failed_batch_is_halved_and_asked_again(redis):
+    """The bug this closes: the second call's reply was cut off and the check
+    stopped there, so everything after the first fourteen went unchecked."""
     llm = BatchLLM(fail_on=2)
     _ctx, data = await verified(redis, llm, count=23)
 
-    assert data["checked"] == 14
-    assert data["unchecked"] == 9
+    assert llm.batch_sizes == [14, 9, 4, 5]
+    assert data["checked"] == 23
     assert data["status"] == "done"
+
+
+async def test_a_claim_that_keeps_failing_is_the_only_one_left_unchecked(redis):
+    """Halving stops at a single claim, and the batches after it are still
+    asked: one bad call costs one verdict, not the rest of the answer."""
+    llm = BatchLLM(fail_if="Finding number 20 rests")
+    _ctx, data = await verified(redis, llm, count=40)
+
+    assert data["checked"] == 39
+    assert data["unchecked"] == 1
+    unchecked = [c for c in data["claims"] if c["verdict"] == verify.UNCHECKED]
+    assert "Finding number 20 rests" in unchecked[0]["text"]
 
 
 async def test_the_first_call_failing_still_reports_a_failed_check(redis):
     """Nothing was ruled on, so the block says so rather than showing a verdict
     list with nothing in it."""
-    llm = BatchLLM(fail_on=1)
+    llm = BatchLLM(always=True)
     ctx, data = await verified(redis, llm, count=23)
 
     assert data is None
     blocks = [b for b in await ctx.stream.snapshot() if b["type"] == "verification"]
     assert blocks[-1]["data"]["status"] == "failed"
+
+
+class CrowdedLLM(BatchLLM):
+    """Rules claim 2 of any batch `partial`, the shape of a judge that finds a
+    flaw where there is none, and answers the second look with `parts`.
+    `alone_fails` makes the second look itself fall over."""
+
+    def __init__(self, parts=None, *, alone_fails: bool = False):
+        super().__init__()
+        self.parts = parts or []
+        self.alone_fails = alone_fails
+        self.second_looks = 0
+
+    async def structured(self, messages, schema, **kwargs):
+        if schema is verify.Breakdown:
+            self.second_looks += 1
+            if self.alone_fails:
+                raise LLMError("provider fell over")
+            return verify.Breakdown(parts=[verify.Part(**part) for part in self.parts])
+        support = await super().structured(messages, schema, **kwargs)
+        support.verdicts[1] = verify.Verdict(claim=2, verdict="partial", note="not stated")
+        return support
+
+
+async def test_a_finding_is_cleared_when_every_part_is_found_in_the_source(redis):
+    """The bug this closes: "never says 'strictly' data-specific" over a claim
+    whose source said autoencoders are data-specific and impractical as a
+    general technique. Asked to find the support rather than the flaw, the
+    judge copies the source's words, and they are on the page."""
+    llm = CrowdedLLM(
+        [
+            {
+                "text": "Finding number 1 rests on the retrieved passage",
+                "source": 1,
+                "quote": "What the page says about the limiter.",
+            }
+        ]
+    )
+    _ctx, data = await verified(redis, llm, count=5)
+
+    assert llm.second_looks == 1
+    assert data["partial"] == 0
+    assert data["supported"] == 5
+
+
+async def test_a_second_look_that_fails_keeps_the_first_ruling(redis):
+    llm = CrowdedLLM(alone_fails=True)
+    _ctx, data = await verified(redis, llm, count=5)
+
+    assert data["partial"] == 1
+    assert data["checked"] == 5
+
+
+PAGE = (
+    "As a compression method, autoencoders do not perform better than their "
+    "alternatives. And the fact that autoencoders are data-specific makes them "
+    "impractical as a general technique. They are restricted in ways that allow "
+    "them to copy only approximately, and to copy only input that resembles the "
+    "training data."
+)
+CLAIM = (
+    "However, autoencoders are strictly data-specific: they only know how to compress "
+    "and reconstruct inputs that closely resemble their training data, and they perform "
+    "poorly as general file compression methods."
+)
+
+
+def _flagged() -> verify.Claim:
+    return verify.Claim(text=CLAIM, sources=[5], verdict=verify.PARTIAL, note="never says strictly")
+
+
+def _parts(*quotes: str) -> verify.Breakdown:
+    texts = [
+        "autoencoders are strictly data-specific",
+        "they only know how to compress and reconstruct inputs that closely resemble "
+        "their training data",
+        "they perform poorly as general file compression methods",
+    ]
+    return verify.Breakdown(
+        parts=[verify.Part(text=t, source=5, quote=q) for t, q in zip(texts, quotes, strict=True)]
+    )
+
+
+def _page_source():
+    return {5: SearchResult(title="Glossary", url="https://g.test", content=PAGE)}
+
+
+def test_every_part_quoted_from_the_page_clears_the_finding():
+    claim = _flagged()
+    verify._rule_parts(
+        claim,
+        _parts(
+            "the fact that autoencoders are data-specific",
+            "to copy only input that resembles the training data",
+            "makes them impractical as a general technique",
+        ),
+        [],
+        _page_source(),
+    )
+    assert claim.verdict == verify.SUPPORTED
+    assert claim.note == ""
+    assert "data-specific" in claim.evidence
+
+
+def test_a_quote_that_is_not_on_the_page_counts_as_missing():
+    claim = _flagged()
+    verify._rule_parts(
+        claim,
+        _parts(
+            "the fact that autoencoders are data-specific",
+            "to copy only input that resembles the training data",
+            "autoencoders are terrible at compressing arbitrary files",
+        ),
+        [],
+        _page_source(),
+    )
+    assert claim.verdict == verify.PARTIAL
+    assert "perform poorly as general file compression" in claim.note
+
+
+def test_a_breakdown_that_leaves_part_of_the_claim_out_changes_nothing():
+    """The judge cannot clear a claim by dropping the part it could not find."""
+    claim = _flagged()
+    breakdown = verify.Breakdown(
+        parts=[
+            verify.Part(
+                text="autoencoders are data-specific",
+                source=5,
+                quote="the fact that autoencoders are data-specific",
+            )
+        ]
+    )
+    verify._rule_parts(claim, breakdown, [], _page_source())
+    assert claim.verdict == verify.PARTIAL
+    assert claim.note == "never says strictly"
+
+
+def test_a_breakdown_with_nothing_found_keeps_the_first_ruling():
+    claim = _flagged()
+    verify._rule_parts(claim, _parts("", "", ""), [], _page_source())
+    assert claim.verdict == verify.PARTIAL
+    assert claim.note == "never says strictly"
 
 
 # --------------------------------------------------------------- no citations
@@ -563,18 +774,12 @@ def test_an_unchecked_claim_keeps_its_verdict_but_shows_the_missing_figure():
     assert verify.summary_of([claim])["figures"] == 1
 
 
-def test_a_literature_check_may_make_more_calls_and_run_past_the_preset():
+def test_the_check_may_run_past_the_preset():
     from app.agent.budget import Budget
     from app.agent.depth import get
 
     groups = verify._batches([verify.Claim(text="x" * 20, sources=[1])] * 100, per_call=14)
-    assert len(groups) == verify.MAX_JUDGE_CALLS
-    groups = verify._batches(
-        [verify.Claim(text="x" * 20, sources=[1])] * 100,
-        per_call=14,
-        calls=verify.LIBRARY_JUDGE_CALLS,
-    )
-    assert len(groups) == verify.LIBRARY_JUDGE_CALLS
+    assert sum(len(group) for group in groups) == 100
 
     budget = Budget(get("quick"))
     budget.llm_calls = budget.depth.max_llm_calls

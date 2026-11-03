@@ -108,11 +108,11 @@ class Budget:
     def allow_check(self, *, calls: int, seconds: float) -> None:
         """Let the citation check run past the preset by this much.
 
-        For literature projects, where every sentence is a claim and the
-        verdicts are what a thesis rests on: there an answer written at the
-        end of its budget came back with half its sentences unchecked, not
-        because anything failed but because the clock had run out while the
-        reader was already reading. The answer is on screen by then, so the
+        Granted on every run, sized to the answer: an answer written at the
+        end of its budget otherwise came back with half its sentences
+        unchecked, not because anything failed but because the clock or the
+        call count had run out while the reader was already reading. The
+        answer is on screen by then, so the
         extra time costs a later verdict, never a later answer. Bounded, and
         well inside the runner's hard limit (`runner.hard_limit_s`).
         """

@@ -49,27 +49,27 @@ log = logging.getLogger(__name__)
 # How many claims one call rules on. Enough to cover an answer's load-bearing
 # sentences without turning the check into a second writing call.
 JUDGED_LIMIT = 14
-# How many such calls one check may make. One call is not a check of a deep
-# report: a run with twenty-three cited sentences would be summarised as
-# "14 of 23 checked", with the nine the answer *ends* on never
-# ruled on, which is where a citation drifts furthest from its source. The
-# ceiling is on the check rather than on the answer, so a pathological answer
-# still cannot make the verification cost more than the writing. Whatever the
-# batches do not reach is extracted, counted and reported as unchecked, exactly
-# as before.
-MAX_JUDGE_CALLS = 3
-# A literature project's answer is checked sentence by sentence, every one of
-# them a claim (`paragraph_claims`), and three calls covered forty-two: a long
-# answer's closing paragraphs, where a citation drifts furthest, came back
-# unchecked. There the check may make this many calls, and run this much past
-# the preset's budget (`Budget.allow_check`).
-LIBRARY_JUDGE_CALLS = 8
-LIBRARY_CHECK_S = 90.0
+# Every judgeable claim is ruled on: the batches cover the whole list, however
+# many calls that takes. A fixed ceiling on calls reported a long answer as
+# "14 of 38 checked", with the paragraphs it ends on never looked at, which is
+# where a citation drifts furthest from its source. What bounds the check is
+# `CLAIM_LIMIT` below and the time the check is granted past the preset
+# (`Budget.allow_check`): the answer is on screen by then, so the extra time
+# costs a later verdict, never a later answer. Whatever the clock does not reach
+# is still counted and reported as unchecked.
+CHECK_S = 90.0
 # The ceiling on extraction itself, which exists only to bound the block's
 # payload. An answer with two hundred cited sentences is pathological; one with
 # thirty is an ordinary deep report, and its thirty are all enumerated.
 CLAIM_LIMIT = 200
+# How many findings get a second look of their own (`_second_look`).
+SECOND_LOOK_LIMIT = 12
+# The floor on what one verify call may answer with.
 VERIFY_TOKENS = 1600
+# What one verdict costs in the reply: the claim number, the verdict, a note
+# and the source's words copied as evidence. A flat 1600 for fourteen of them
+# cut the reply off mid-object, and the claims after it went unchecked.
+PER_VERDICT_TOKENS = 220
 # What one claim costs in a verify prompt: the sentence, plus its share of the
 # evidence the model rules against. Crude, and only ever used to divide a small
 # window into a batch size that fits in it.
@@ -285,6 +285,16 @@ class Verdict(BaseModel):
 
 class Support(BaseModel):
     verdicts: list[Verdict] = Field(default_factory=list)
+
+
+class Part(BaseModel):
+    text: str = ""
+    source: int = 0
+    quote: str = ""
+
+
+class Breakdown(BaseModel):
+    parts: list[Part] = Field(default_factory=list)
 
 
 def _prose(answer: str) -> str:
@@ -968,6 +978,11 @@ def summary_of(claims: list[Claim]) -> dict[str, object]:
     }
 
 
+def _reply_tokens(claims: int) -> int:
+    """What a reply ruling on this many claims may cost."""
+    return max(VERIFY_TOKENS, claims * PER_VERDICT_TOKENS)
+
+
 def _plan_for_window(ctx: RunContext) -> tuple[int, int, int]:
     """How many claims one call may carry, what the answer may cost, and how
     many characters of evidence fit beside them.
@@ -979,17 +994,19 @@ def _plan_for_window(ctx: RunContext) -> tuple[int, int, int]:
     fourteen claims and their evidence were truncated to 4096 tokens and the
     model had nothing left to rule on.
 
-    A remote model keeps the ordinary limits: its window is far larger than
-    anything assembled here.
+    A remote model keeps the ordinary batch size: its window is far larger than
+    anything assembled here. Either way the reply is given room for every
+    verdict in the batch, since a reply cut off mid-object rules on nothing.
     """
     window = settings.local_context_tokens if _judge(ctx).is_local else 0
     if window <= 0:
-        return JUDGED_LIMIT, VERIFY_TOKENS, 0
+        return JUDGED_LIMIT, _reply_tokens(JUDGED_LIMIT), 0
 
     # The verdicts share the window with the claims they judge.
-    response = max(200, min(VERIFY_TOKENS, window // 4))
+    response = max(200, min(_reply_tokens(JUDGED_LIMIT), window // 4))
     room = window - response - VERIFY_RULES_TOKENS
-    per_call = max(2, min(JUDGED_LIMIT, room // PER_CLAIM_TOKENS))
+    per_call = min(JUDGED_LIMIT, room // PER_CLAIM_TOKENS, response // PER_VERDICT_TOKENS)
+    per_call = max(2, per_call)
     # Half the remaining room for evidence, half for the claims themselves.
     evidence_chars = max(1000, (room - per_call * 60) // 2 * 4)
     return per_call, response, evidence_chars
@@ -1018,13 +1035,11 @@ async def _report_uncited(ctx: RunContext, answer: str) -> dict[str, object] | N
     return data
 
 
-def _batches(
-    claims: list[Claim], *, per_call: int = JUDGED_LIMIT, calls: int = MAX_JUDGE_CALLS
-) -> list[list[Claim]]:
-    """The judgeable claims, cut into the groups one call each rules on."""
+def _batches(claims: list[Claim], *, per_call: int = JUDGED_LIMIT) -> list[list[Claim]]:
+    """The judgeable claims, all of them, cut into the groups one call each
+    rules on."""
     size = max(1, per_call)
-    groups = [claims[index : index + size] for index in range(0, len(claims), size)]
-    return groups[:calls]
+    return [claims[index : index + size] for index in range(0, len(claims), size)]
 
 
 def _evidence_for(
@@ -1101,6 +1116,150 @@ def _evidence_for(
     return evidence
 
 
+async def _second_look(
+    ctx: RunContext,
+    question: str,
+    claims: list[Claim],
+    passages: list[Passage],
+    registered: dict[int, object],
+    plan: tuple[int, int],
+) -> None:
+    """Look again at every claim ruled against, one claim per call, and this
+    time make the judge find the support instead of the flaw.
+
+    Asked "what is missing", a judge finds something: a "strictly" the source
+    does not use, "a model" where the source said "an autoencoder", a part its
+    other cited source states. Those findings survived a prompt that forbade
+    them. So the second look asks the other question: split the sentence into
+    its statements, and copy, for each, the source's words that state it. The
+    verdict is then counted rather than chosen (`_rule_parts`).
+    """
+    flagged = [claim for claim in claims if claim.verdict in (PARTIAL, UNSUPPORTED)]
+    for claim in flagged[:SECOND_LOOK_LIMIT]:
+        if not ctx.budget.can_verify():
+            log.info("second look stopped early: %s", ctx.budget.summary())
+            return
+        reply_tokens, evidence_chars = plan
+        evidence = _evidence_for([claim], passages, registered)
+        if evidence_chars:
+            evidence, _dropped = prompts.fit_passages(evidence, max_chars=evidence_chars)
+        try:
+            ctx.budget.spend_llm()
+            breakdown = await _judge(ctx).structured(
+                prompts.verify_parts(question, claim, prompts.format_evidence(evidence)),
+                Breakdown,
+                max_tokens=max(VERIFY_TOKENS, reply_tokens // 2),
+            )
+        except LLMError as exc:
+            log.info("second look failed: %s", exc)
+            continue
+        _rule_parts(claim, breakdown, evidence, registered)
+
+
+# How much of a claim's own words its parts must repeat before a breakdown is
+# taken as covering the claim. Below it the judge left something out, most
+# likely the part it could not find, and the first ruling stands.
+PARTS_COVERAGE = 0.7
+
+
+def _content_words(text: str) -> set[str]:
+    return {word for word in _comparable(text).split() if len(word) > 3 and not word.isdigit()}
+
+
+def _rule_parts(
+    claim: Claim, breakdown: Breakdown, evidence: list[Passage], registered: dict[int, object]
+) -> None:
+    """Turn a breakdown into a verdict, deterministically.
+
+    A part counts as stated only when its quote is found in what the claim
+    cites, the passages the judge was shown or the page itself (`page_words`),
+    so a quote the model made up carries nothing. Every part stated is
+    supported; some, partial, with the note naming the parts that are not.
+    A breakdown that does not cover the claim, or states none of it, leaves
+    the first ruling as it was: the second look may clear a finding, but it
+    is not a new way of making one.
+    """
+    parts = [part for part in breakdown.parts if part.text.strip()]
+    wanted = _content_words(claim.text)
+    said = set().union(*(_content_words(part.text) for part in parts)) if parts else set()
+    if not parts or (wanted and len(wanted & said) / len(wanted) < PARTS_COVERAGE):
+        log.info("second look did not cover the claim; first ruling stands")
+        return
+
+    cited = set(claim.sources) - set(claim.unknown)
+    texts = [passage.text for passage in evidence if passage.source_index in cited]
+    texts += [getattr(registered.get(number), "content", "") or "" for number in sorted(cited)]
+    stated: list[tuple[Part, str]] = []
+    missing: list[Part] = []
+    for part in parts:
+        found = ""
+        if len(_comparable(part.quote)) >= QUOTE_MIN_CHARS // 2:
+            found = next((hit for t in texts if (hit := page_words(part.quote, t))), "")
+        if found:
+            stated.append((part, found))
+        else:
+            missing.append(part)
+
+    if not stated:
+        return
+    if not missing:
+        claim.verdict, claim.note = SUPPORTED, ""
+        claim.evidence = " ".join(stated[0][1].split())[:400]
+        return
+    claim.verdict = PARTIAL
+    gaps = "; ".join(f'"{" ".join(part.text.split())}"' for part in missing)
+    claim.note = f"Not in the cited sources: {gaps}"[:200]
+    claim.evidence = " ".join(stated[0][1].split())[:400]
+
+
+async def _rule(
+    ctx: RunContext,
+    question: str,
+    batch: list[Claim],
+    passages: list[Passage],
+    registered: dict[int, object],
+    plan: tuple[int, int],
+) -> bool:
+    """Have the judge rule on one batch. False when some of it went unruled.
+
+    A failed call is not the end of the check. The usual failure is a reply
+    cut off mid-object, and the batch's claims were then left unchecked along
+    with every batch after it: "14 of 38 checked". So the batch is halved and
+    each half asked again, down to a single claim, and the next batch is asked
+    regardless. What still fails stays `unchecked` and is counted as such.
+    """
+    # Asked per call, not once for the lot: the check runs after the answer is
+    # on screen, so stopping costs the reader verdicts they can see are
+    # missing, while overrunning the budget costs them the run's own guarantees.
+    if not ctx.budget.can_verify():
+        log.info("citation check stopped early: %s", ctx.budget.summary())
+        return False
+
+    reply_tokens, evidence_chars = plan
+    evidence = _evidence_for(batch, passages, registered)
+    if evidence_chars:
+        # Same cut as the writer's, at a passage boundary and by rank, rather
+        # than wherever the runtime's window happens to end.
+        evidence, _dropped = prompts.fit_passages(evidence, max_chars=evidence_chars)
+    try:
+        ctx.budget.spend_llm()
+        support = await _judge(ctx).structured(
+            prompts.verify(question, batch, prompts.format_evidence(evidence)),
+            Support,
+            max_tokens=reply_tokens,
+        )
+    except LLMError as exc:
+        log.info("citation check of %d claims failed: %s", len(batch), exc)
+        if len(batch) == 1:
+            return False
+        half = len(batch) // 2
+        first = await _rule(ctx, question, batch[:half], passages, registered, plan)
+        second = await _rule(ctx, question, batch[half:], passages, registered, plan)
+        return first and second
+    _apply(batch, support)
+    return True
+
+
 async def check(
     ctx: RunContext, question: str, answer: str, passages: list[Passage]
 ) -> dict[str, object] | None:
@@ -1140,10 +1299,12 @@ async def check(
     # `unchecked` and is counted as such, which is the whole difference between
     # a limit and a blind spot.
     judgeable = _judgeable(claims)
-    calls = MAX_JUDGE_CALLS
-    if getattr(ctx, "library", None) is not None:
-        calls = LIBRARY_JUDGE_CALLS
-        ctx.budget.allow_check(calls=LIBRARY_JUDGE_CALLS, seconds=LIBRARY_CHECK_S)
+    per_call, reply_tokens, evidence_chars = _plan_for_window(ctx)
+    groups = _batches(judgeable, per_call=per_call)
+    # The check's own allowance past the preset: a call for every batch, as
+    # many again for the halves of a batch whose reply did not parse, and one
+    # for each finding's second look.
+    ctx.budget.allow_check(calls=3 * len(judgeable), seconds=CHECK_S)
     if judgeable and not ctx.budget.can_verify():
         # Said rather than skipped in silence. An absent block is indistinguish-
         # able from a check that ran and found nothing wrong, and that reading
@@ -1164,45 +1325,22 @@ async def check(
         block_id = opening["id"]
         await ctx.stream.emit_block(opening)
 
-        per_call, response_tokens, evidence_chars = _plan_for_window(ctx)
-        for batch in _batches(judgeable, per_call=per_call, calls=calls):
-            # Re-asked per call, not once for the lot: the check runs after the
-            # answer is on screen, so stopping between batches costs the reader
-            # verdicts they can see are missing, while overrunning the budget
-            # costs them the run's own guarantees.
-            if not ctx.budget.can_verify():
-                log.info("citation check stopped early: %s", ctx.budget.summary())
-                break
-
-            evidence = _evidence_for(batch, passages, registered)
-            if evidence_chars:
-                # Same cut as the writer's, at a passage boundary and by rank,
-                # rather than wherever the runtime's window happens to end.
-                evidence, _dropped = prompts.fit_passages(evidence, max_chars=evidence_chars)
-            try:
-                ctx.budget.spend_llm()
-                support = await _judge(ctx).structured(
-                    prompts.verify(question, batch, prompts.format_evidence(evidence)),
-                    Support,
-                    max_tokens=response_tokens,
-                )
-                _apply(batch, support)
-            except LLMError as exc:
-                # Said, not swallowed. Removing the block would leave the reader
-                # believing an answer was checked when it was not, and reporting
-                # the claims as they stand (every one of them unchecked) would be
-                # a verdict list with nothing in it.
-                log.info("citation check failed: %s", exc)
-                if all(claim.verdict == UNCHECKED for claim in judgeable):
-                    await ctx.stream.emit_patch(
-                        block_id,
-                        [blocks.replace("/data", _pending(blocks.STATUS_FAILED, len(claims)))],
-                    )
-                    return None
-                # A later batch failing does not throw away the verdicts already
-                # in hand; what it did not reach is reported as unchecked, which
-                # is what the summary line is for.
-                break
+        failed = False
+        plan = (reply_tokens, evidence_chars)
+        for batch in groups:
+            if not await _rule(ctx, question, batch, passages, registered, plan):
+                failed = True
+        await _second_look(ctx, question, judgeable, passages, registered, plan)
+        if failed and all(claim.verdict == UNCHECKED for claim in judgeable):
+            # Said, not swallowed. Removing the block would leave the reader
+            # believing an answer was checked when it was not, and reporting
+            # the claims as they stand (every one of them unchecked) would be a
+            # verdict list with nothing in it.
+            await ctx.stream.emit_patch(
+                block_id,
+                [blocks.replace("/data", _pending(blocks.STATUS_FAILED, len(claims)))],
+            )
+            return None
 
     # After the model and before the bookkeeping, so a quote the model called
     # supported is still caught, and a citation of a source that does not exist

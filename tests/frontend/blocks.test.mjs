@@ -684,8 +684,8 @@ test('an uncited answer with no placeholder still says nothing was checked', () 
 // ── the tray ─────────────────────────────────────────────────────────
 //
 // Everything about an answer that is not the answer folds into one row of
-// icons under it. What the reader has to see stays in the transcript as text:
-// a finding behind an icon is a finding nobody reads.
+// icons under it. The citation check's icon carries its verdict on its face,
+// so a finding is never a grey icon among grey icons.
 
 function turn() {
   const host = document.createElement('article');
@@ -721,13 +721,62 @@ test('a finished answer keeps only its prose in the transcript', () => {
   assert.match(view.chips.get('p').title, /Auto → Simple/);
 });
 
-test('a citation check that found something stays in the transcript', () => {
+test('a citation check that found something is an orange chip with the count', () => {
   const { container, view } = turn();
   view.render(finishedRun(FLAGGED));
   view.settle();
 
-  assert.ok(container.children.some((node) => node.classList.contains('verification')));
-  assert.ok(!chipIds(view).includes('v'));
+  assert.ok(!container.children.some((node) => node.classList.contains('verification')));
+  const chip = view.chips.get('v');
+  assert.ok(chip.classList.contains('warn'));
+  assert.equal(chip.querySelector('.tray-count').textContent, '1');
+  assert.match(chip.title, /1 only partly/);
+});
+
+test('a citation check where everything held is green, without a count', () => {
+  const { view } = turn();
+  view.render(finishedRun(CLEAN));
+  view.settle();
+
+  const chip = view.chips.get('v');
+  assert.ok(chip.classList.contains('ok'));
+  assert.equal(chip.querySelector('.tray-count'), null);
+});
+
+test('a check that did not run, or left claims unchecked, is grey', () => {
+  for (const data of [
+    { status: 'failed', total: 2, claims: [] },
+    { status: 'skipped', total: 2, claims: [] },
+    { status: 'done', total: 2, claims: [{ verdict: 'supported' }, { verdict: 'unchecked' }] },
+  ]) {
+    const { view } = turn();
+    view.render(finishedRun(data));
+    view.settle();
+    const chip = view.chips.get('v');
+    assert.ok(chip.classList.contains('off'), data.status);
+    assert.ok(!chip.classList.contains('ok'));
+  }
+});
+
+test('a running check shows its eye in the chip, not behind it', () => {
+  const { container, view } = turn();
+  const blocks = finishedRun({ status: 'active', total: 3, claims: [] });
+  view.render(blocks);
+
+  const chip = view.chips.get('v');
+  assert.ok(chip.classList.contains('checking'));
+  assert.equal(chip.querySelector('.tray-chip-label').textContent, 'Checking');
+  assert.ok(!container.children.some((node) => node.classList.contains('verification')));
+
+  // A patch that changes nothing the chip shows keeps the same nodes, so the
+  // eye's animation is not restarted.
+  const label = chip.querySelector('.tray-chip-label');
+  view.render([...blocks]);
+  assert.equal(chip.querySelector('.tray-chip-label'), label);
+
+  view.render(finishedRun(FLAGGED));
+  assert.ok(chip.classList.contains('warn'));
+  assert.ok(!chip.classList.contains('checking'));
 });
 
 test('an icon opens its block under the row, and closes it again', () => {
