@@ -54,10 +54,6 @@ The first run of each model, sorted by hand:
 - **Thinking.** The model learned to close Qwen's empty thinking block itself. That is why it works in Ollama, which opens one by default, without anything to switch thinking off.
 - **Export.** `mlx_lm fuse` saves MLX's own layout: renamed tensors, transposed `conv1d` weights and 1.0 added to every RMSNorm weight. A GGUF made from that has its norms off by one, so the tuned linear weights were copied back into the original checkpoint before converting.
 
-## Bug found on the way
-
-Local thinking models never name a chat. The app asks local runtimes for 24 tokens with no switch to turn thinking off. Qwen3.5 9.7B in Ollama thinks by default, spends all 24 tokens on it and returns nothing, so 180 of 180 titles came back empty, and `set_title` drops an empty title without a word. Not fixed yet.
-
 ## Limits
 
 - Claude wrote the 60 test messages and sorted the titles by hand, with no second reviewer. One message moves a percentage by 1.7 points.

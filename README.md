@@ -139,6 +139,8 @@ Ollama and LM Studio running on the host are discovered automatically. Without
 an OpenRouter key the app still runs on them; embeddings then fall back to
 keyword ranking. Note that the redaction tool requires a local model.
 
+A model that is specialized for title generation is currently in work. Progress can be found at https://huggingface.co/stneric/simplixity-title-0.8b
+
 ### Without Docker
 
 Python 3.12+ and [uv](https://docs.astral.sh/uv/), plus a Redis server.

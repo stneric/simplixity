@@ -70,7 +70,7 @@ The router also names new chats unless a title model is set. Same 60 messages an
 | GPT Luna | 63% | 89% | 53% |
 | Gemini 3.8 Flash (by its own ID), Gemini 3.5 Flash Lite, MiniMax | every call failed | | |
 
-Haiku names the subject well but runs long: 9 of 60 titles have more than six words and 9 hit the 24-token limit. The failures are the first bug below.
+Haiku names the subject well but runs long: 9 of 60 titles have more than six words and 9 hit the 24-token limit. The failures are the first bug below, since fixed.
 
 Haiku and Gemini classify about equally well, and Haiku costs a fifth, about $2.60 less per 1,000 questions. Gemini writes better titles, but titles are off by default, and the [title model](title-model.md) does that job locally. Haiku also accepts having its reasoning switched off, so it avoids the first bug below. DeepSeek is cheaper still, but its p90 latency is the highest of the three, and the classifier runs before the first word of every answer.
 
@@ -112,7 +112,7 @@ The same 10 cases, each a question with its sources, 5 in German and 5 in Englis
 
 Every model answered in the reader's language except GPT Luna once, which answered an English question about a German subsidy in German. The test sources are short, so a real answer from ten long passages costs several times more.
 
-Haiku cites accurately but adds its own advice between cited sentences ("If you run 3.9 or 3.10, you must upgrade Python first"), so half of what it writes goes unchecked. GPT Luna puts the citation after the full stop, which the app does not attach to the sentence (second bug below). gpt-4o-mini wrote bullet lists without citations. Flash Lite is by far the fastest and has the lowest support rate.
+Haiku cites accurately but adds its own advice between cited sentences ("If you run 3.9 or 3.10, you must upgrade Python first"), so half of what it writes goes unchecked. GPT Luna puts the citation after the full stop, which the app did not attach to the sentence (second bug below, since fixed). gpt-4o-mini wrote bullet lists without citations. Flash Lite is by far the fastest and has the lowest support rate.
 
 Gemini 3.8 Flash gets to the first word in under 2 s, cites the most and nearly everything it cites holds up. DeepSeek Flash matches it for a fifth of the price, about $1.30 less per 1,000 answers on these short inputs.
 
@@ -140,7 +140,7 @@ Voyage 4 Lite ranks as well as Gemini Embedding 2 for a tenth of the price, with
 1. **Titles fail on models that require reasoning.** For titles the app sends `reasoning: {enabled: false}`. Gemini 3.8 Flash by its own ID, Gemini 3.5 Flash Lite and MiniMax answer HTTP 400 "Reasoning is mandatory for this endpoint and cannot be disabled", and `runs._title` only logs it, so the chat keeps its truncated name. `~google/gemini-flash-latest` works today because OpenRouter routes it to an endpoint that allows it, which can change.
 2. **A citation after the full stop is not checked.** `verify.claims_of` does not attach "…on SSDs. [1]" to the sentence before it, so the reader sees a cited answer the citation check never looked at. The prompt does not say where the number goes.
 
-Neither is fixed yet.
+Both are fixed. A model that refuses the switch is asked again with room to think, and later titles on it start there. A citation right after the full stop now belongs to the sentence before it, and the prompt asks for the number before the full stop.
 
 ## Limits
 

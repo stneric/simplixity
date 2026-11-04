@@ -328,6 +328,88 @@ def test_a_caller_asking_for_no_thinking_says_so_out_loud(monkeypatch):
     assert payload["max_tokens"] == 24  # no headroom bolted on top
 
 
+def test_ollama_is_told_not_to_think_when_the_caller_asks_for_none(monkeypatch):
+    """Qwen3.5 in Ollama thinks by default and spent a 24-token title ceiling
+    on it: 180 of 180 titles came back empty."""
+    monkeypatch.setattr(llm.settings, "reasoning_max_tokens", 1024)
+    payload = llm.LLM("qwen3.5", "ollama")._payload(
+        [], stream=False, temperature=0.0, max_tokens=24, reasoning_tokens=0
+    )
+
+    assert payload["reasoning_effort"] == "none"
+    assert "reasoning" not in payload
+    assert payload["max_tokens"] == 24
+
+
+def _completions(monkeypatch, *replies: httpx.Response) -> list[dict]:
+    """Serve `replies` in order; returns the payloads that were sent."""
+    sent: list[dict] = []
+    queue = list(replies)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return queue.pop(0)
+
+    monkeypatch.setattr(
+        llm.net, "client", lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
+    monkeypatch.setattr(llm, "_MUST_REASON", set())
+    return sent
+
+
+def _answer(content: str = "", **message) -> httpx.Response:
+    return httpx.Response(200, json={"choices": [{"message": {"content": content, **message}}]})
+
+
+async def test_a_model_that_cannot_stop_reasoning_is_asked_again_with_room(monkeypatch):
+    """Gemini 3.5 Flash Lite and MiniMax answer the off switch with HTTP 400,
+    and every chat title on them failed."""
+    monkeypatch.setattr(llm.settings, "reasoning_max_tokens", 1024)
+    refusal = httpx.Response(
+        400,
+        json={
+            "error": {"message": "Reasoning is mandatory for this endpoint and cannot be disabled"}
+        },
+    )
+    sent = _completions(monkeypatch, refusal, _answer("Redis Streams Setup"), _answer("Next"))
+    model = llm.LLM("google/gemini-3.5-flash-lite", "openrouter")
+
+    assert await model.complete([], max_tokens=24, reasoning_tokens=0) == "Redis Streams Setup"
+    assert sent[0]["reasoning"] == {"enabled": False}
+    assert sent[1]["reasoning"] == {"max_tokens": 1024}
+    assert sent[1]["max_tokens"] == 24 + 1024
+
+    # The next call starts where the last one ended, without the doomed request.
+    assert await model.complete([], max_tokens=24, reasoning_tokens=0) == "Next"
+    assert len(sent) == 3 and sent[2]["reasoning"] == {"max_tokens": 1024}
+
+
+async def test_a_model_that_thought_instead_of_answering_is_asked_again(monkeypatch):
+    monkeypatch.setattr(llm.settings, "reasoning_max_tokens", 0)
+    sent = _completions(
+        monkeypatch, _answer("", reasoning_content="Thinking Process: …"), _answer("A title")
+    )
+
+    title = await llm.LLM("qwen3", "lmstudio").complete([], max_tokens=24, reasoning_tokens=0)
+
+    assert title == "A title"
+    assert sent[1]["max_tokens"] == 24 + llm._FORCED_REASONING
+
+
+async def test_other_errors_and_empty_answers_are_not_retried(monkeypatch):
+    sent = _completions(
+        monkeypatch,
+        httpx.Response(400, json={"error": {"message": "bad request"}}),
+        _answer(""),
+    )
+    model = llm.LLM("some/deepseek-reasoner", "openrouter")
+
+    with pytest.raises(llm.LLMError, match="bad request"):
+        await model.complete([], max_tokens=24, reasoning_tokens=0)
+    assert await model.complete([], max_tokens=24, reasoning_tokens=0) == ""
+    assert len(sent) == 2
+
+
 def test_the_allowance_can_be_turned_off_entirely(monkeypatch):
     monkeypatch.setattr(llm.settings, "reasoning_max_tokens", 0)
     payload = llm.LLM("some/model", "openrouter")._payload(

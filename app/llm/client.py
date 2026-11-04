@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import random
+import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, TypeVar
@@ -56,6 +57,22 @@ _RETRY_STATUS = frozenset({408, 409, 429, 500, 502, 503, 504})
 # call, and a model that gains the capability at the provider is picked up by
 # the same restart, which is the right trade for a single-replica app.
 _JSON_SCHEMA_MODE: dict[tuple[str, str], bool] = {}
+
+# Models that cannot be stopped from thinking, learned by trying, like the
+# schema mode above. Some OpenRouter endpoints answer `reasoning: {enabled:
+# false}` with HTTP 400 "Reasoning is mandatory for this endpoint and cannot be
+# disabled"; a local model may ignore the switch and spend the whole ceiling
+# thinking. Either way a call that asked for no reasoning is sent again with
+# room for it, and later calls to the same model start there.
+_MUST_REASON: set[tuple[str, str]] = set()
+
+# The room such a model gets when the deployment-wide allowance is off. 512 is
+# the smallest thinking budget some Gemini endpoints accept.
+_FORCED_REASONING = 512
+
+# What a provider says when it refuses the switch. Matched on the provider's
+# message only, so a model named "…-reasoner" does not count as a refusal.
+_REASONING_REFUSAL = re.compile(r"reasoning|thinking", re.IGNORECASE)
 
 
 class LLMError(RuntimeError):
@@ -276,6 +293,12 @@ class LLM:
                 # the deployment-wide off switch (`reasoning_max_tokens = 0`)
                 # deliberately sends no field at all, so this cannot ride on it.
                 payload["reasoning"] = {"enabled": False}
+            elif reasoning_tokens == 0 and self.provider == OLLAMA:
+                # Ollama's OpenAI endpoint turns thinking off with this, and
+                # takes it from models that never think (checked against 0.24).
+                # Without it Qwen3.5 thinks through a 24-token title ceiling and
+                # answers with nothing.
+                payload["reasoning_effort"] = "none"
         if response_format:
             payload["response_format"] = response_format
         if stream and self.provider != LMSTUDIO:
@@ -301,7 +324,15 @@ class LLM:
     ) -> str:
         """`reasoning_tokens=0` denies a thinking model its scratchpad, for the
         calls where thinking is not worth what it costs. None, the default,
-        leaves the deployment-wide allowance in place."""
+        leaves the deployment-wide allowance in place.
+
+        A model that cannot stop thinking, because the provider refuses the
+        switch or because it thought anyway and wrote nothing, is asked once
+        more with room to think (`_MUST_REASON`).
+        """
+        key = (self.provider, self.model)
+        if reasoning_tokens == 0 and key in _MUST_REASON:
+            reasoning_tokens = _forced_reasoning()
         payload = self._payload(
             messages,
             stream=False,
@@ -310,13 +341,50 @@ class LLM:
             response_format=response_format,
             reasoning_tokens=reasoning_tokens,
         )
-        data = await self._post_with_retry(payload)
+        try:
+            data = await self._post_with_retry(payload)
+        except LLMError as exc:
+            detail = str(exc).removeprefix(f"{self.model}:")
+            if reasoning_tokens != 0 or not _REASONING_REFUSAL.search(detail):
+                raise
+            log.info(
+                "%s cannot have its reasoning switched off, retrying with room: %s",
+                self.model,
+                detail.strip(),
+            )
+            return await self._think_after_all(messages, temperature, max_tokens, response_format)
         self.usage.add(data.get("usage"))
         choices = data.get("choices") or []
         if not choices:
             raise LLMError(f"{self.model} returned no choices")
         message = choices[0].get("message") or {}
-        return (message.get("content") or "").strip()
+        content = (message.get("content") or "").strip()
+        # `reasoning` from OpenRouter and Ollama, `reasoning_content` from LM
+        # Studio and others that follow DeepSeek.
+        if (
+            not content
+            and reasoning_tokens == 0
+            and (message.get("reasoning") or message.get("reasoning_content"))
+        ):
+            log.info("%s thought instead of answering, retrying with room", self.model)
+            return await self._think_after_all(messages, temperature, max_tokens, response_format)
+        return content
+
+    async def _think_after_all(
+        self,
+        messages: list[dict[str, Any]],
+        temperature: float,
+        max_tokens: int | None,
+        response_format: dict[str, Any] | None,
+    ) -> str:
+        _MUST_REASON.add((self.provider, self.model))
+        return await self.complete(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            reasoning_tokens=_forced_reasoning(),
+        )
 
     async def _post_with_retry(self, payload: dict[str, Any]) -> dict[str, Any]:
         last: Exception | None = None
@@ -696,6 +764,11 @@ def _reasoning_budget() -> int:
     who finds this costing more than it saves.
     """
     return max(settings.reasoning_max_tokens, 0)
+
+
+def _forced_reasoning() -> int:
+    """The allowance for a model that cannot be stopped from thinking."""
+    return _reasoning_budget() or _FORCED_REASONING
 
 
 # What a ceiling becomes after a model has proved it cannot write inside it.

@@ -435,13 +435,17 @@ async def _title(db: aiosqlite.Connection, chat_id: str, query: str, spec: Title
     off by default. `reasoning_tokens=0` keeps what it does cost near zero: the
     24-token ceiling is on the title, and a thinking model handed the usual
     1024-token reasoning allowance spent almost all of it deciding what to call
-    a chat, which was ~90% of the invisible spend and bought nothing.
+    a chat, which was ~90% of the invisible spend and bought nothing. A model
+    that cannot stop thinking gets the room after all (`LLM.complete`).
     """
     try:
         llm = LLM(spec.model, spec.provider)
         title = await llm.complete(
             prompts.title(query), max_tokens=TITLE_TOKENS, reasoning_tokens=0
         )
+        if not title.strip():
+            log.info("%s returned an empty title for chat %s", spec.model, chat_id)
+            return
         await chats.set_title(db, chat_id, title)
     except Exception as exc:
         log.info("could not generate a title for chat %s: %s", chat_id, exc)
