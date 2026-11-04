@@ -27,24 +27,35 @@ class UISettings(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    chat_provider: str = Field(default_factory=lambda: env.default_provider)
-    chat_model: str = Field(default_factory=lambda: env.default_model)
-    embedding_provider: str = Field(default_factory=lambda: env.embedding_provider)
-    embedding_model: str = Field(default_factory=lambda: env.embedding_model)
-    embedding_enabled: bool = Field(default_factory=lambda: env.embedding_enabled)
-    # A small, fast model for triage only. Empty means "use the chat model",
-    # which is the default. An install with one model configured must not have
-    # to configure a second one to work.
-    router_model: str = Field(default_factory=lambda: env.router_model or "")
-    router_provider: str = Field(default_factory=lambda: env.router_provider)
+    # The models a fresh install starts with, the ones recommended in the README
+    # and compared in docs/eval/model-choice.md. A second profile starts from
+    # the first profile's choices instead, see `load`. Models are chosen here
+    # and in the UI only, not in `.env`. Pinned to the versions that were tested,
+    # not to `~…-latest` aliases or `openrouter/auto`: those move to another
+    # model without notice, and runs then behave differently with nothing in the
+    # settings to explain why.
+    chat_provider: str = "openrouter"
+    chat_model: str = "google/gemini-3.8-flash"
+    # `nvidia/nemotron-3-embed-1b:free` is the zero-cost alternative; it ranks
+    # nearly as well and misses only on some German questions.
+    embedding_provider: str = "openrouter"
+    embedding_model: str = "google/gemini-embedding-2"
+    embedding_enabled: bool = True
+    # A small, fast model for triage only. Empty means "use the chat model".
+    # Without an OpenRouter key an OpenRouter router is skipped and the chat
+    # model triages, see `runs._reachable`, so an install that only runs local
+    # models does not have to clear this first. Haiku classifies as well as
+    # Gemini 3.8 Flash for a fifth of the price.
+    router_model: str = "anthropic/claude-haiku-5.5"
+    router_provider: str = "openrouter"
     # Whether a new chat gets a model-written name. Off by default: the call runs
     # after the footer is written and therefore cannot be included in the price
     # the run reports, and the truncated question already names the chat.
     title_enabled: bool = Field(default_factory=lambda: env.title_enabled)
     # Empty means "whatever triages", the router if there is one and the chat
     # model otherwise. See `runs._title_spec`.
-    title_model: str = Field(default_factory=lambda: env.title_model or "")
-    title_provider: str = Field(default_factory=lambda: env.title_provider)
+    title_model: str = ""
+    title_provider: str = "openrouter"
     depth: str = Field(default_factory=lambda: depth_module.get(env.default_depth).id)
     # Which corpora searches may draw on. A list because these combine: a
     # question can want the general web *and* the paper databases.
@@ -68,9 +79,10 @@ class UISettings(BaseModel):
     # (`verify._judge`). Empty keeps the old rule: the router on the web, the
     # writer's own model in a literature project. A model of another family is
     # the point of setting one: a writer judging itself shares its own blind
-    # spots, and waves through the sentence it was sure enough to write.
-    judge_provider: str = ""
-    judge_model: str = ""
+    # spots, and waves through the sentence it was sure enough to write. Hence
+    # Haiku by default, beside a Gemini writer.
+    judge_provider: str = "openrouter"
+    judge_model: str = "anthropic/claude-haiku-5.5"
 
     @field_validator("home_location")
     @classmethod

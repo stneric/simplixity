@@ -111,11 +111,9 @@ def _report_configuration() -> None:
             "OPENROUTER_API_KEY is not set. Remote models will fail; only Ollama or "
             "LM Studio can answer."
         )
-    log.info(
-        "search=%s · embeddings=%s · depths=quick|balanced|deep",
-        settings.searxng_api_url,
-        settings.embedding_model if settings.embedding_enabled else "off",
-    )
+    # No model names here: each profile picks its own in the UI, so there is no
+    # single install-wide model this line could truthfully report.
+    log.info("search=%s · depths=quick|balanced|deep", settings.searxng_api_url)
 
 
 app = FastAPI(

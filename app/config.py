@@ -59,26 +59,16 @@ class Settings(BaseSettings):
     model_cache_ttl_s: int = 3600
     local_model_cache_ttl_s: int = 300
 
-    # Fallbacks only. The UI's persisted choice wins; these cover a fresh
-    # install and any request that arrives before settings are saved.
-    default_model: str = "openai/gpt-4o-mini"
-    default_provider: str = "openrouter"
+    # Which models run is chosen in the UI and stored per profile
+    # (`store.settings_store.UISettings`), never here: a second place to set
+    # them would only be a default the UI silently overrides.
     default_depth: str = "auto"
-    # Optional small model used only to triage the question: the one call that
-    # stands between the user and the first byte of output. Empty means the chat
-    # model does it, which is what a single-model install wants.
-    router_model: str | None = None
-    router_provider: str = "openrouter"
     # Naming a new chat with a model. Off by default, and deliberately: the call
     # happens *after* the run's footer has been written, so whatever it costs can
     # never appear in the price the run reports, and a truncated question is a
     # perfectly good name for a chat. Measured at ~$0.0005 per new chat on
     # Gemini Flash, almost all of it reasoning tokens spent on a six-word title.
     title_enabled: bool = False
-    # Which model does it. Empty falls back to the router, then to the chat
-    # model, so switching the feature on never requires a second decision.
-    title_model: str | None = None
-    title_provider: str = "openrouter"
     # Where "what is the weather" means when the question does not say. Not
     # geolocation: the CSP and the permissions policy exclude that,
     # so this is the only place a default place can come from.
@@ -105,11 +95,6 @@ class Settings(BaseSettings):
     scholar_mailto: str = ""
     scholar_timeout_s: float = 20.0
 
-    embedding_enabled: bool = True
-    # The only two zero-cost embedding models on OpenRouter are
-    # nvidia/nemotron-3-embed-1b:free and nvidia/llama-nemotron-embed-vl-1b-v2:free.
-    embedding_model: str = "nvidia/nemotron-3-embed-1b:free"
-    embedding_provider: str = "openrouter"
     # Free tiers rate-limit per *request*, so send many inputs per call.
     embedding_batch_size: int = 64
     embedding_timeout_s: float = 30.0

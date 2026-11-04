@@ -165,8 +165,42 @@ variable with an explanation. Only two are required:
 | `OPENROUTER_API_KEY` | Chat models and embeddings. Optional if you only use local models. |
 | `SEARXNG_SECRET` | Required by SearXNG. Any random string, e.g. `openssl rand -hex 32`. |
 
-The chat model is chosen in the UI and stored per profile. `DEFAULT_MODEL` is
-only used until something is picked.
+Models are not set in `.env`. The chat, router, judge, title and embedding
+models are chosen in the settings and stored per profile.
+
+### Default models
+
+A fresh install uses these models without any setup, all on OpenRouter and
+pinned to the versions that were tested, picked from nine cheap, fast models
+([comparison](docs/eval/model-choice.md)). Any of them can be changed in the
+settings, and a second profile starts from the first profile's choices.
+
+| Setting | Model | Why |
+|---|---|---|
+| Chat model | `google/gemini-3.8-flash` | Starts writing within 2 seconds of getting its sources, cites the most sentences (87%), and 98 to 100% of what it cites holds up. |
+| Router model | `anthropic/claude-haiku-5.5` | The best classifier tested (98%), at a fifth of Gemini's price. It runs before every answer. |
+| Judge model | `anthropic/claude-haiku-5.5` | Let no unsupported claim through and copies the evidence word for word. It comes from a different model family than the writer, so it does not share its blind spots. |
+| Embedding model | `google/gemini-embedding-2` | Found the right passage for every question, including German questions against English sources. |
+
+Without an OpenRouter key the router and judge step aside, and the chat model
+you picked does their work.
+
+#### What a question costs
+
+20 questions with these defaults on depth Auto, at OpenRouter's prices of
+November 2026:
+
+| Depth Auto chose | Questions | Cost per question | Done after |
+|---|---|---|---|
+| Simple: a fact, the weather, small talk | 6 | $0.0006 to $0.009, median $0.004 | about 25 s |
+| Balanced | 9 | $0.022 to $0.041, median $0.030 | about 1.5 min |
+| Deep: comparisons, the state of research | 5 | $0.056 to $0.095, median $0.076 | about 2 min |
+
+That is $0.034 per question on average, or about $3.40 per 100. Half of it is
+embeddings, because a run embeds every page it reads to rank the passages.
+`mongodb/voyage-4-lite` ranked as well as Gemini Embedding 2 for a tenth of the
+price, which roughly halves the cost of a question. The footer under each
+answer shows what that answer cost.
 
 ## Running it on a server
 

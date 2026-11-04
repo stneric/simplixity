@@ -423,6 +423,36 @@ def test_switching_titles_on_never_demands_a_second_decision():
     assert runs._title_spec(chosen) == runs.TitleSpec("tiny/model", "ollama")
 
 
+def test_a_fresh_install_starts_with_the_recommended_models():
+    """The README's recommended setup, docs/eval/model-choice.md."""
+    fresh = settings_store.UISettings()
+    assert (fresh.chat_provider, fresh.chat_model) == ("openrouter", "google/gemini-3.8-flash")
+    assert (fresh.router_provider, fresh.router_model) == (
+        "openrouter",
+        "anthropic/claude-haiku-5.5",
+    )
+    assert (fresh.judge_provider, fresh.judge_model) == ("openrouter", "anthropic/claude-haiku-5.5")
+    assert fresh.embedding_model == "google/gemini-embedding-2"
+
+
+def test_without_an_openrouter_key_the_default_router_and_judge_step_aside(monkeypatch):
+    """A local-only install picks a local chat model and touches nothing else.
+    The OpenRouter router and judge it got by default must not fail its runs."""
+    local = settings_store.UISettings(
+        chat_provider="ollama", chat_model="qwen3.5:latest", title_enabled=True
+    )
+
+    monkeypatch.setattr(runs.settings, "openrouter_api_key", "")
+    assert runs._reachable(local.router_model, local.router_provider) == ""
+    assert runs._reachable(local.judge_model, local.judge_provider) == ""
+    assert runs._reachable("tiny/model", "ollama") == "tiny/model"
+    assert runs._title_spec(local) == runs.TitleSpec("qwen3.5:latest", "ollama")
+
+    monkeypatch.setattr(runs.settings, "openrouter_api_key", "sk-test")
+    assert runs._reachable(local.router_model, local.router_provider) == local.router_model
+    assert runs._title_spec(local) == runs.TitleSpec("anthropic/claude-haiku-5.5", "openrouter")
+
+
 async def test_auto_is_a_depth_the_settings_accept(client):
     current = (await client.get("/api/settings")).json()
     assert (await client.put("/api/settings", json={**current, "depth": "auto"})).status_code == 200

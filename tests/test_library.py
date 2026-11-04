@@ -1292,10 +1292,10 @@ async def test_vectors_made_the_older_way_still_search_and_are_renewed(db, offli
     not useless. Dropping it would leave a large library searched by keyword
     until every passage was embedded again, so it is used, and re-made a slice
     at a time."""
-    from app.config import settings
     from app.embed.embedder import vector_tag
+    from app.store.settings_store import UISettings
 
-    model = settings.embedding_model
+    model = UISettings().embedding_model
     project, _c, _rows = await _library_with(
         db,
         offline_embed,

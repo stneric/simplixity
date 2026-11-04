@@ -195,10 +195,11 @@ async def _start(
         lenses=[i for i in resolved_lenses if i != lens_module.LIBRARY.id],
         embedding_model=saved.embedding_model if saved.embedding_enabled else None,
         embedding_provider=saved.embedding_provider,
-        # Empty is the normal case and means "the chat model triages too".
-        router_model=saved.router_model or settings.router_model or None,
-        router_provider=saved.router_provider or settings.router_provider,
-        judge_model=saved.judge_model or None,
+        # Empty means "the chat model triages too".
+        router_model=_reachable(saved.router_model, saved.router_provider) or None,
+        router_provider=saved.router_provider or "openrouter",
+        judge_model=_reachable(saved.judge_model, saved.judge_provider or saved.chat_provider)
+        or None,
         judge_provider=saved.judge_provider or saved.chat_provider,
         home_location=saved.home_location or settings.home_location,
         history=history,
@@ -332,11 +333,28 @@ def _title_spec(saved: settings_store.UISettings) -> TitleSpec | None:
     """
     if not saved.title_enabled:
         return None
-    if saved.title_model:
-        return TitleSpec(saved.title_model, saved.title_provider or saved.chat_provider)
-    if saved.router_model:
-        return TitleSpec(saved.router_model, saved.router_provider or saved.chat_provider)
+    title_provider = saved.title_provider or saved.chat_provider
+    if _reachable(saved.title_model, title_provider):
+        return TitleSpec(saved.title_model, title_provider)
+    router_provider = saved.router_provider or saved.chat_provider
+    if _reachable(saved.router_model, router_provider):
+        return TitleSpec(saved.router_model, router_provider)
     return TitleSpec(saved.chat_model, saved.chat_provider)
+
+
+def _reachable(model: str, provider: str) -> str:
+    """The model, or "" when it is an OpenRouter model and no key is set.
+
+    The defaults put the router and the judge on OpenRouter. An install that
+    only runs local models picks a local chat model and would otherwise fail
+    every run at the classifier with "no OpenRouter API key", for a setting it
+    never touched. Without the key these fall back to what an empty setting
+    means: the chat model triages and names chats, and the judge follows its
+    old rule.
+    """
+    if model and (provider or "openrouter") == "openrouter" and not settings.openrouter_api_key:
+        return ""
+    return model
 
 
 def _finalizer(
