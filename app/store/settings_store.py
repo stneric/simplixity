@@ -36,10 +36,11 @@ class UISettings(BaseModel):
     # settings to explain why.
     chat_provider: str = "openrouter"
     chat_model: str = "google/gemini-3.8-flash"
-    # `nvidia/nemotron-3-embed-1b:free` is the zero-cost alternative; it ranks
-    # nearly as well and misses only on some German questions.
+    # Voyage 4 Lite ranked as well as Gemini Embedding 2 for a tenth of the
+    # price. `nvidia/nemotron-3-embed-1b:free` is the zero-cost alternative; it
+    # ranks nearly as well and misses only on some German questions.
     embedding_provider: str = "openrouter"
-    embedding_model: str = "google/gemini-embedding-2"
+    embedding_model: str = "mongodb/voyage-4-lite"
     embedding_enabled: bool = True
     # A small, fast model for triage only. Empty means "use the chat model".
     # Without an OpenRouter key an OpenRouter router is skipped and the chat

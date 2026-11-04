@@ -7,13 +7,13 @@ November 2026. Nine cheap, fast models on OpenRouter, tested in the four roles t
 - **Router:** Haiku. It classifies as well as Gemini 3.8 Flash (98% against 95%) for a fifth of the price. Its chat titles are weaker (70% against 97%), which matters only when titles are switched on.
 - **Judge:** Haiku. It passed no bad claim, copied the evidence word for word 98% of the time, costs $0.11 per 1,000 claims, and comes from a different model family than the writer.
 - **Chat model:** Gemini 3.8 Flash. First word after 1.8 s, 87% of its sentences cited, 98 to 100% of cited claims supported. DeepSeek Flash is as good for a fifth of the price.
-- **Embeddings:** Gemini Embedding 2 found the right passage for every question. Voyage 4 Lite did too, at a tenth of the price.
+- **Embeddings:** Voyage 4 Lite found the right passage for every question, as Gemini Embedding 2 did, at a tenth of the price.
 - **Old default:** `openai/gpt-4o-mini`, which new profiles started with before this comparison, came last or nearly last in three of the four roles. A fresh install now starts with the picks above.
 - **Evidence:** 60 questions, 40 claims, 10 answers and 30 embedding queries, written and labelled by Claude with no second reviewer. Differences of a few points are noise, and the judge and embedding tests were too easy to separate the best models.
 
 ## Result
 
-A fresh install now uses these picks, pinned to the versions tested: `google/gemini-3.8-flash` writes, `anthropic/claude-haiku-5.5` triages and checks, `google/gemini-embedding-2` ranks. Every pick is at or near the top of its role. DeepSeek Flash as chat model would cut the price of an answer to a fifth at about the same quality.
+A fresh install now uses these picks, pinned to the versions tested: `google/gemini-3.8-flash` writes, `anthropic/claude-haiku-5.5` triages and checks, `mongodb/voyage-4-lite` ranks. Every pick is at or near the top of its role. DeepSeek Flash as chat model would cut the price of an answer to a fifth at about the same quality.
 
 The tests also turned up two bugs, listed at the end.
 
@@ -133,7 +133,7 @@ Gemini 3.8 Flash gets to the first word in under 2 s, cites the most and nearly 
 
 The free default, Nemotron 3, misses only on German questions. Nemotron 3.5 fails with HTTP 502 from three texts per request on, and the app sends up to 64. multilingual-e5-large reads only 512 tokens, too few for the app's passages.
 
-Voyage 4 Lite ranks as well as Gemini Embedding 2 for a tenth of the price, with vectors a third the size. Changing the model makes stored vectors stale, and a literature project is embedded again on its next search.
+Voyage 4 Lite ranks as well as Gemini Embedding 2 for a tenth of the price, with vectors a third the size, so it is the default. On 20 full runs at depth Auto it brought the average cost of a question from $0.034 to $0.019. Changing the model makes stored vectors stale, and a literature project is embedded again on its next search.
 
 ## Bugs found
 

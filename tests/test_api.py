@@ -432,7 +432,7 @@ def test_a_fresh_install_starts_with_the_recommended_models():
         "anthropic/claude-haiku-5.5",
     )
     assert (fresh.judge_provider, fresh.judge_model) == ("openrouter", "anthropic/claude-haiku-5.5")
-    assert fresh.embedding_model == "google/gemini-embedding-2"
+    assert fresh.embedding_model == "mongodb/voyage-4-lite"
 
 
 def test_without_an_openrouter_key_the_default_router_and_judge_step_aside(monkeypatch):

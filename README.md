@@ -180,7 +180,7 @@ settings, and a second profile starts from the first profile's choices.
 | Chat model | `google/gemini-3.8-flash` | Starts writing within 2 seconds of getting its sources, cites the most sentences (87%), and 98 to 100% of what it cites holds up. |
 | Router model | `anthropic/claude-haiku-5.5` | The best classifier tested (98%), at a fifth of Gemini's price. It runs before every answer. |
 | Judge model | `anthropic/claude-haiku-5.5` | Let no unsupported claim through and copies the evidence word for word. It comes from a different model family than the writer, so it does not share its blind spots. |
-| Embedding model | `google/gemini-embedding-2` | Found the right passage for every question, including German questions against English sources. |
+| Embedding model | `mongodb/voyage-4-lite` | Found the right passage for every question, including German questions against English sources, as Gemini Embedding 2 did, for a tenth of its price. |
 
 Without an OpenRouter key the router and judge step aside, and the chat model
 you picked does their work.
@@ -192,15 +192,14 @@ November 2026:
 
 | Depth Auto chose | Questions | Cost per question | Done after |
 |---|---|---|---|
-| Simple: a fact, the weather, small talk | 6 | $0.0006 to $0.009, median $0.004 | about 25 s |
-| Balanced | 9 | $0.022 to $0.041, median $0.030 | about 1.5 min |
-| Deep: comparisons, the state of research | 5 | $0.056 to $0.095, median $0.076 | about 2 min |
+| Simple: a fact, the weather, small talk | 6 | $0.0006 to $0.005, median $0.004 | about 15 s |
+| Balanced | 9 | $0.010 to $0.029, median $0.014 | about 1 min |
+| Deep: comparisons, the state of research | 5 | $0.033 to $0.058, median $0.044 | about 2 min |
 
-That is $0.034 per question on average, or about $3.40 per 100. Half of it is
-embeddings, because a run embeds every page it reads to rank the passages.
-`mongodb/voyage-4-lite` ranked as well as Gemini Embedding 2 for a tenth of the
-price, which roughly halves the cost of a question. The footer under each
-answer shows what that answer cost.
+That is $0.019 per question on average, or about $1.90 per 100. Embeddings
+are an eighth of it. With `google/gemini-embedding-2` the same questions cost
+$0.034 on average, about half of it embeddings, and it ranked no better in the
+comparison. The footer under each answer shows what that answer cost.
 
 ## Running it on a server
 
