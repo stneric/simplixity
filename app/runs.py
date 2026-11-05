@@ -7,6 +7,7 @@ is the only place that knows all three.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
@@ -33,6 +34,10 @@ from app.store.db import DEFAULT_USER
 from app.store.stream import RunStream
 
 log = logging.getLogger(__name__)
+
+# Title calls run beside the answer, and asyncio only holds weak references to
+# tasks: one nobody keeps could be collected halfway through naming a chat.
+_titling: set[asyncio.Task[None]] = set()
 
 TITLE_TOKENS = 24
 
@@ -236,9 +241,20 @@ async def _start(
     runner.spawn(
         stream,
         lambda s: orchestrate(s, request),
-        finalize=_finalizer(db, request, is_new_chat, _title_spec(saved)),
+        finalize=_finalizer(db),
         claimed=True,
     )
+    # Named while the answer is still being written, not after it: the call
+    # needs nothing but the question, and a title that only turned up once the
+    # answer was done reached the open page after its last refresh, so it was
+    # first seen on a reload.
+    title = _title_spec(saved) if is_new_chat else None
+    if title is not None:
+        task = asyncio.create_task(
+            _title(db, stream, resolved_chat_id, query, title), name=f"title:{run_id}"
+        )
+        _titling.add(task)
+        task.add_done_callback(_titling.discard)
     log.info(
         "run %s started · chat=%s depth=%s sources=%s model=%s/%s",
         run_id,
@@ -379,7 +395,7 @@ def _title_spec(saved: settings_store.UISettings) -> TitleSpec | None:
     """Which model names a new chat, or None when nothing should.
 
     Off is the default. The call cannot be counted in the run's reported price,
-    it happens after the footer, so it is opt-in rather than something an install
+    it is not part of the run, so it is opt-in rather than something an install
     pays for without being asked.
 
     Switching it on picks a model without demanding one: whatever was chosen for
@@ -413,12 +429,7 @@ def _reachable(model: str, provider: str) -> str:
     return model
 
 
-def _finalizer(
-    db: aiosqlite.Connection,
-    request: RunRequest,
-    is_new_chat: bool,
-    title: TitleSpec | None = None,
-):
+def _finalizer(db: aiosqlite.Connection):
     """Persist the finished transcript, whatever the outcome.
 
     Blocks come from the Redis snapshot rather than being accumulated in memory,
@@ -446,8 +457,6 @@ def _finalizer(
                 status="error",
             )
             raise
-        if title is not None and is_new_chat and status == "completed":
-            await _title(db, request.chat_id, request.query, title)
 
     return finalize
 
@@ -480,18 +489,23 @@ def _answer_of(blocks: list[dict[str, Any]]) -> str:
     return ""
 
 
-async def _title(db: aiosqlite.Connection, chat_id: str, query: str, spec: TitleSpec) -> None:
-    """Name the chat. Only reached when the setting asked for it.
+async def _title(
+    db: aiosqlite.Connection, stream: RunStream, chat_id: str, query: str, spec: TitleSpec
+) -> None:
+    """Name the chat, beside the run. Only reached when the setting asked for it.
 
     Best-effort by design: the truncated query is already in place, so a failure
-    here costs a nicer title and nothing else.
+    here costs a nicer title and nothing else. The title goes out on the run's
+    stream as well, so the open page shows it without a reload. One that
+    arrives after the answer is only in the database; the page asks for it
+    again once the run is over.
 
-    **Nothing here is in the price the run reported.** This call happens after
-    the footer has been written, which is why the setting exists and why it is
-    off by default. `reasoning_tokens=0` keeps what it does cost near zero: the
-    24-token ceiling is on the title, and a thinking model handed the usual
-    1024-token reasoning allowance spent almost all of it deciding what to call
-    a chat, which was ~90% of the invisible spend and bought nothing. A model
+    **Nothing here is in the price the run reported.** This call is not part of
+    the run, which is why the setting exists and why it is off by default.
+    `reasoning_tokens=0` keeps what it does cost near zero: the 24-token ceiling
+    is on the title, and a thinking model handed the usual 1024-token reasoning
+    allowance spent almost all of it deciding what to call a chat, which was
+    ~90% of the invisible spend and bought nothing. A model
     that cannot stop thinking gets the room after all (`LLM.complete`).
     """
     try:
@@ -502,7 +516,9 @@ async def _title(db: aiosqlite.Connection, chat_id: str, query: str, spec: Title
         if not title.strip():
             log.info("%s returned an empty title for chat %s", spec.model, chat_id)
             return
-        await chats.set_title(db, chat_id, title)
+        stored = await chats.set_title(db, chat_id, title)
+        if stored:
+            await stream.emit("title", {"chat_id": chat_id, "title": stored})
     except Exception as exc:
         log.info("could not generate a title for chat %s: %s", chat_id, exc)
 

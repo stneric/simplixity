@@ -37,6 +37,9 @@ const sendBtn = $('send');
 // chat opened, or a question sent, while the page was busy with another one
 // cannot land in the chat now on screen.
 const state = { chatId: null, chatProject: null, runId: null, subscription: null, nav: 0 };
+// How long after a new chat's answer its title is looked for once more, when
+// the title model was slower than the answer.
+const TITLE_GRACE_MS = 3000;
 
 const settings = new Settings();
 const depthChip = new DepthChip($('depth-chip'), (depth) => settings.patch({ depth }));
@@ -211,6 +214,26 @@ const projectHome = new ProjectHome($('project-home'), {
 
 /** What the page shows when no chat is open: the project's page inside a
  *  project, the welcome everywhere else. */
+// ── heading ──────────────────────────────────────────────────────────
+
+const heading = $('chat-heading');
+
+/** Name the open chat in the topbar and the tab, or clear both with null. */
+function setHeading(title) {
+  const text = title?.trim() || '';
+  heading.hidden = !text;
+  heading.replaceChildren(Object.assign(document.createElement('span'), { textContent: text }));
+  heading.title = text;
+  document.title = text ? `${text} · Simplixity` : 'Simplixity';
+}
+
+/** Take the open chat's title from the freshly loaded list, when it is in it.
+ *  A search or a project filter can leave it out; the heading stays then. */
+function syncHeading() {
+  const chat = chatList.chats.find((c) => c.id === state.chatId);
+  if (chat) setHeading(chat.title);
+}
+
 function showLanding() {
   const project = activeProject();
   if (project) {
@@ -471,10 +494,11 @@ function detach() {
   setBusy(false);
 }
 
-function attach(runId, view, note, answered) {
+function attach(runId, view, note, answered, { fresh = false } = {}) {
   state.runId = runId;
   setBusy(true);
   pinned = true;
+  let titled = false;
 
   state.subscription = subscribe(runId, {
     onChange: (blocks) => {
@@ -482,6 +506,11 @@ function attach(runId, view, note, answered) {
       stickToBottom();
     },
     onPhase: (phase) => view.setPhase(phase),
+    onTitle: ({ chat_id, title }) => {
+      titled = true;
+      if (chat_id === state.chatId) setHeading(title);
+      chatList.load();
+    },
     onDone: ({ status, message }) => {
       setBusy(false);
       state.runId = null;
@@ -489,9 +518,17 @@ function attach(runId, view, note, answered) {
       answered({ at: new Date() });
       if (status === 'error') note(errorNote(message ?? 'The run failed.'));
       if (status === 'cancelled') note(errorNote(message ?? 'Stopped.', { level: 'stopped' }));
-      // The title is written after the run completes, so the sidebar is only
-      // right once it has.
-      chatList.load();
+      // The answer's own changes (the chat moves to the top of the list).
+      // A new chat's title is written beside the answer and normally arrived
+      // above; one from a slow title model lands after the run, and is
+      // looked for once more a little later.
+      const chatId = state.chatId;
+      chatList.load().then(syncHeading);
+      if (fresh && !titled) {
+        setTimeout(() => {
+          if (state.chatId === chatId) chatList.load().then(syncHeading);
+        }, TITLE_GRACE_MS);
+      }
       stickToBottom();
     },
   });
@@ -586,13 +623,19 @@ form.addEventListener('submit', async (event) => {
   }
   attachments.markSent(chat_id, files);
   answered({ by: model });
-  if (chat_id !== state.chatId) {
+  const fresh = chat_id !== state.chatId;
+  if (fresh) {
     state.chatProject = projectList.selectedId;
     state.chatId = chat_id;
     location.hash = `chat=${chat_id}`;
-    chatList.load().then(() => chatList.setActive(chat_id));
+    // The question stands in until the list has the server's title.
+    setHeading(query);
+    chatList.load().then(() => {
+      chatList.setActive(chat_id);
+      if (state.chatId === chat_id) syncHeading();
+    });
   }
-  attach(run_id, view, note, answered);
+  attach(run_id, view, note, answered, { fresh });
 });
 
 sendBtn.addEventListener('click', async () => {
@@ -664,6 +707,7 @@ async function openChat(chatId) {
   syncComposer();
   location.hash = `chat=${chatId}`;
   chatList.setActive(chatId);
+  setHeading(chat.title);
   output.replaceChildren();
   welcome.hidden = true;
   projectHome.hide();
@@ -711,6 +755,7 @@ function startNewChat() {
   attachments.reset();
   syncComposer();
   history.replaceState(null, '', location.pathname);
+  setHeading(null);
   output.replaceChildren();
   showLanding();
   chatList.setActive(null);

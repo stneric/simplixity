@@ -179,15 +179,17 @@ async def fail_stale_messages(conn: aiosqlite.Connection) -> int:
     return stale
 
 
-async def set_title(conn: aiosqlite.Connection, chat_id: str, title: str) -> None:
-    cleaned = " ".join(title.split()).strip("\"'“”").strip()
+async def set_title(conn: aiosqlite.Connection, chat_id: str, title: str) -> str:
+    """Store a title. Returns it as stored, or "" when nothing was left of it."""
+    cleaned = " ".join(title.split()).strip("\"'“”").strip()[:TITLE_LIMIT]
     if not cleaned:
-        return
+        return ""
     await conn.execute(
         "UPDATE chats SET title = ?, updated_at = ? WHERE id = ?",
-        (cleaned[:TITLE_LIMIT], _now(), chat_id),
+        (cleaned, _now(), chat_id),
     )
     await conn.commit()
+    return cleaned
 
 
 async def delete_chat(conn: aiosqlite.Connection, chat_id: str, *, user: str | None = None) -> bool:

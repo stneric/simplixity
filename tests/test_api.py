@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -13,6 +14,7 @@ from app.config import settings
 from app.main import app
 from app.store import chats, settings_store
 from app.store.db import DEFAULT_USER
+from app.store.stream import RunStream
 
 
 @pytest.fixture
@@ -25,7 +27,7 @@ async def client(redis, db, monkeypatch):
         await stream.emit_block(blocks.text_block("done"))
         await stream.emit_done("completed")
 
-    async def fake_title(db_conn, chat_id, _query, _spec):
+    async def fake_title(db_conn, _stream, chat_id, _query, _spec):
         await chats.set_title(db_conn, chat_id, "Generated title")
 
     monkeypatch.setattr(runs, "orchestrate", fake_run)
@@ -377,6 +379,29 @@ async def test_titles_are_written_when_the_setting_asks_for_them(client):
     body = await start_run(client)
     chat = (await client.get(f"/api/chats/{body['chat_id']}")).json()
     assert chat["title"] == "Generated title"
+
+
+async def test_a_title_reaches_the_open_page_on_the_run_stream(redis, db, monkeypatch):
+    """Written beside the answer and sent on the stream, so the page shows it
+    without a reload. Stored as `set_title` stores it, quotes and all removed."""
+
+    class FakeLLM:
+        def __init__(self, *_args):
+            pass
+
+        async def complete(self, *_args, **_kwargs):
+            return '  "Generated title"  '
+
+    monkeypatch.setattr(runs, "LLM", FakeLLM)
+    await chats.ensure_chat(db, "c-title", "hello world")
+    stream = RunStream(redis, "r-title")
+
+    await runs._title(db, stream, "c-title", "hello world", runs.TitleSpec("m", "ollama"))
+
+    events = await redis.xrange(stream.events_key)
+    sent = [json.loads(fields["data"]) for _id, fields in events if fields["event"] == "title"]
+    assert sent == [{"chat_id": "c-title", "title": "Generated title"}]
+    assert (await chats.get_chat(db, "c-title"))["title"] == "Generated title"
 
 
 async def test_the_title_model_round_trips(client):

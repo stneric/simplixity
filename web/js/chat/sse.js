@@ -78,7 +78,7 @@ function setValue(parent, key, value) {
  * `syncing` is the polling fallback, the run is still being followed, just
  * without token-level streaming.
  */
-export function subscribe(runId, { onChange, onPhase, onDone, onStatus }) {
+export function subscribe(runId, { onChange, onPhase, onTitle, onDone, onStatus }) {
   const blocks = new Map();
   let source = null;
   let closed = false; // terminal: either the run ended or the caller let go
@@ -161,6 +161,11 @@ export function subscribe(runId, { onChange, onPhase, onDone, onStatus }) {
     });
 
     source.addEventListener('phase', (e) => onPhase?.(JSON.parse(e.data).phase));
+
+    // A new chat's title, written beside the answer (app/runs.py `_title`).
+    // Not in the polling fallback: the page reloads the chat list when the run
+    // ends, which picks it up there.
+    source.addEventListener('title', (e) => onTitle?.(JSON.parse(e.data)));
 
     source.addEventListener(TERMINAL, (e) => finish(JSON.parse(e.data)));
 

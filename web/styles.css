@@ -473,6 +473,39 @@ html.boot-collapsed .app .scrim { display: none; }
   height: 52px;
   padding: 0 12px;
   flex: none;
+  position: relative;
+}
+
+/* The open chat's title, centred on the page rather than in what the buttons
+   leave of the bar, and clear of them on both sides. */
+.chat-heading {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  height: 52px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 200px);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fg);
+}
+.chat-heading span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-heading[hidden] { display: none; }
+/* Inside a project the bar on the left can be wide, so the title follows it
+   instead of sitting on top of it. */
+.topbar:has(.project-bar:not([hidden])) .chat-heading {
+  position: static;
+  transform: none;
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  justify-content: center;
+}
+@media (max-width: 720px) {
+  .topbar:has(.project-bar:not([hidden])) .chat-heading { display: none; }
 }
 
 /* Inside a project: where you are, the way out, and its model. */
