@@ -133,7 +133,7 @@ model in the settings, and ask something.
 are in place, and `docker compose logs -f simplixity` shows what
 each run is doing.
 
-### Local models only
+### Local models
 
 Ollama and LM Studio running on the host are discovered automatically. Without
 an OpenRouter key the app still runs on them; embeddings then fall back to
