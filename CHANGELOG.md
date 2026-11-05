@@ -6,6 +6,16 @@ include breaking changes, which are called out.
 
 ## Unreleased
 
+- Images can be attached to a chat (PNG, JPEG, WebP, GIF): with the
+  paperclip, by pasting, or by dropping them anywhere on the chat window,
+  which now shows a drop overlay. They are sent to the chat model with the
+  question, and again with follow-ups while that question is in the history.
+  Pictures do not turn a chat into one that answers only from its files.
+- The model picker marks models with vision. With a model that cannot see,
+  image chips and a note above the composer say so and the question is held
+  back; a request that gets through anyway is answered without the images
+  and with a notice.
+
 ## 0.2.0 (2026-11-04)
 
 - **Breaking:** models are chosen in the settings only. `DEFAULT_MODEL`,

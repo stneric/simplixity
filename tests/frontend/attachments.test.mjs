@@ -4,11 +4,48 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { accepted, filesBadge, fileSummary, newChatId, unusable, uploadError } from '../../web/js/chat/attachments-core.js';
+import {
+  accepted,
+  filesBadge,
+  fileSummary,
+  isImage,
+  newChatId,
+  scaledSize,
+  unusable,
+  uploadError,
+  visionWarning,
+} from '../../web/js/chat/attachments-core.js';
 
-test('documents are accepted by name, photos are not', () => {
-  for (const name of ['a.pdf', 'B.PDF', 'c.docx', 'd.md', 'e.markdown', 'f.txt']) assert.ok(accepted(name), name);
-  for (const name of ['photo.png', 'sheet.xlsx', 'old.doc', 'noext', '', null]) assert.ok(!accepted(name), String(name));
+test('documents and pictures are accepted, everything else is not', () => {
+  for (const name of ['a.pdf', 'B.PDF', 'c.docx', 'd.md', 'e.markdown', 'f.txt', 'photo.png', 'x.JPG', 'y.webp', 'z.gif'])
+    assert.ok(accepted(name), name);
+  for (const name of ['sheet.xlsx', 'old.doc', 'phone.heic', 'noext', '', null]) assert.ok(!accepted(name), String(name));
+});
+
+test('a picture is known by its type before its name', () => {
+  assert.ok(isImage({ name: 'clipboard', type: 'image/png' }));
+  assert.ok(!isImage({ name: 'photo.png', type: 'image/heic' }));
+  assert.ok(isImage({ name: 'photo.jpeg', type: '' }));
+  assert.ok(!isImage({ name: 'paper.pdf', type: 'application/pdf' }));
+});
+
+test('a large picture is scaled to its longest side, a small one is left alone', () => {
+  assert.equal(scaledSize(1200, 800, 300_000), null);
+  assert.deepEqual(scaledSize(4096, 2048, 3_000_000), { width: 2048, height: 1024 });
+  assert.deepEqual(scaledSize(1000, 1000, 9_000_000), { width: 1000, height: 1000 });
+});
+
+test('a model without vision is warned about, an unknown one is not', () => {
+  assert.match(visionWarning(false, 'Llama 3', 1), /^Llama 3 can’t see images, so the image/);
+  assert.match(visionWarning(false, 'Llama 3', 3), /the 3 images/);
+  assert.equal(visionWarning(null, 'Groq model', 2), '');
+  assert.equal(visionWarning(true, 'GPT', 2), '');
+  assert.equal(visionWarning(false, 'Llama 3', 0), '');
+});
+
+test('a picture says it is one', () => {
+  assert.equal(fileSummary({ kind: 'image', size: 2_500_000 }), 'Image · 2.4 MB');
+  assert.ok(!unusable({ kind: 'image', size: 10 }));
 });
 
 test('a new chat id is one the server accepts', () => {

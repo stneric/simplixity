@@ -205,6 +205,12 @@ export class ModelPicker {
     this.#renderLabel();
   }
 
+  /** The catalogue entry of the selected model, or null before the catalogue
+   *  has arrived or when the model is no longer in it. */
+  get current() {
+    return this.selected ? (this.#find(this.selected.provider, this.selected.id) ?? null) : null;
+  }
+
   #find(provider, id) {
     return this.groups.all.find((m) => m.provider === provider && m.id === id);
   }
@@ -284,7 +290,7 @@ export class ModelPicker {
 
         const meta = document.createElement('span');
         meta.className = 'picker-row-meta';
-        const bits = [model.provider, contextLabel(model), priceLabel(model)].filter(Boolean);
+        const bits = [model.provider, contextLabel(model), priceLabel(model), model.vision ? 'vision' : ''].filter(Boolean);
         meta.textContent = bits.join(' · ');
 
         row.append(name, meta);

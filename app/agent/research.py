@@ -520,6 +520,9 @@ async def write_answer(
     slots, every writer sat holding one while waiting on a card that could
     never get one.
     """
+    # The pictures go on the question here, on every path that writes an
+    # answer, rather than in each of the prompts that build one.
+    messages = prompts.with_images(messages, ctx.images, earlier=ctx.images_earlier)
     stream = ctx.llm.stream(messages, max_tokens=max_tokens)
     ctx.budget.spend_llm()
     held = asyncio.ensure_future(hold) if hold is not None else None

@@ -511,6 +511,23 @@ test('a run that never embedded anything grows no empty row for it', () => {
   assert.equal(rows.filter((r) => r.children[0].textContent === 'Embedding tokens').length, 0);
 });
 
+test('a run that never searched lists no sources as searched', () => {
+  const lenses = [{ id: 'web', label: 'Web' }];
+  const label = (data) => withClass(renderers.provenance(data), 'prov-row').map((r) => r.children[0].textContent);
+  assert.ok(label({ ...RUN, lenses }).includes('Sources searched'));
+  const direct = { ...RUN, lenses, search: { queries: 0, engines: [] }, sources: { total: 0 } };
+  assert.ok(!label(direct).includes('Sources searched'));
+  assert.match(textOf(renderers.provenance(direct), 'prov-line'), /answered without searching/);
+});
+
+test('the thoughts are rendered as markdown, not shown raw', () => {
+  const out = renderers.thinking({ content: 'Plan:\n\n- **first** step\n- second', status: 'done' });
+  const [body] = withClass(out, 'thinking-body');
+  assert.equal(find(body, 'LI').length, 2);
+  assert.equal(find(body, 'STRONG')[0].textContent, 'first');
+  assert.ok(!body.textContent.includes('**'), body.textContent);
+});
+
 // ── the rule that covers all of them ─────────────────────────────────
 
 test('no widget renderer ever emits markup from a value', () => {

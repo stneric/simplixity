@@ -70,6 +70,10 @@ class ModelInfo:
     local: bool
     context_length: int | None = None
     prompt_price: float | None = None
+    # Whether the model takes pictures. None is "the provider does not say"
+    # (Groq, LM Studio's bare endpoint): such a model is sent the picture and
+    # left to answer or refuse, rather than refused here on a guess.
+    vision: bool | None = None
 
     @property
     def key(self) -> str:
@@ -104,6 +108,7 @@ async def _openrouter(client: httpx.AsyncClient, kind: str) -> list[ModelInfo]:
         pricing = raw.get("pricing") or {}
         prompt_price = _as_float(pricing.get("prompt"))
         completion_price = _as_float(pricing.get("completion"))
+        modalities = (raw.get("architecture") or {}).get("input_modalities")
         models.append(
             ModelInfo(
                 id=raw["id"],
@@ -114,6 +119,7 @@ async def _openrouter(client: httpx.AsyncClient, kind: str) -> list[ModelInfo]:
                 local=False,
                 context_length=raw.get("context_length"),
                 prompt_price=prompt_price,
+                vision="image" in modalities if isinstance(modalities, list) else None,
             )
         )
     return models
@@ -168,7 +174,8 @@ async def _ollama(client: httpx.AsyncClient, kind: str) -> list[ModelInfo]:
         name = entry.get("name") or entry.get("model")
         if not name:
             return None
-        if await _ollama_kind(client, name) != kind:
+        model_kind, vision = await _ollama_kind(client, name)
+        if model_kind != kind:
             return None
         # Parameter size is the one detail worth surfacing for a local model.
         size = (entry.get("details") or {}).get("parameter_size")
@@ -181,25 +188,27 @@ async def _ollama(client: httpx.AsyncClient, kind: str) -> list[ModelInfo]:
             local=True,
             context_length=entry.get("context_length"),
             prompt_price=0.0,
+            vision=vision,
         )
 
     results = await asyncio.gather(*(classify(entry) for entry in tags), return_exceptions=True)
     return [r for r in results if isinstance(r, ModelInfo)]
 
 
-async def _ollama_kind(client: httpx.AsyncClient, name: str) -> str:
-    """Ask Ollama what the model can do; fall back to the name."""
+async def _ollama_kind(client: httpx.AsyncClient, name: str) -> tuple[str, bool | None]:
+    """Ask Ollama what the model can do: its kind, and whether it sees. Falls
+    back to the name, which says nothing about vision."""
     try:
         resp = await client.post(f"{settings.ollama_base_url}/api/show", json={"model": name})
         resp.raise_for_status()
         capabilities = resp.json().get("capabilities") or []
         if "embedding" in capabilities:
-            return EMBEDDING
+            return EMBEDDING, False
         if capabilities:
-            return CHAT
+            return CHAT, "vision" in capabilities
     except Exception:
         log.debug("ollama /api/show unavailable for %s, using name heuristic", name)
-    return EMBEDDING if looks_like_embedding(name) else CHAT
+    return (EMBEDDING, False) if looks_like_embedding(name) else (CHAT, None)
 
 
 async def _lmstudio(client: httpx.AsyncClient, kind: str) -> list[ModelInfo]:
@@ -221,9 +230,12 @@ async def _lmstudio(client: httpx.AsyncClient, kind: str) -> list[ModelInfo]:
         model_id = raw.get("id")
         if not model_id:
             continue
+        vision: bool | None = None
         if typed:
             declared = (raw.get("type") or "").lower()
             model_kind = EMBEDDING if declared == "embeddings" else CHAT
+            # "vlm" is LM Studio's word for a model that takes pictures.
+            vision = declared == "vlm"
         else:
             model_kind = EMBEDDING if looks_like_embedding(model_id) else CHAT
         if model_kind != kind:
@@ -238,6 +250,7 @@ async def _lmstudio(client: httpx.AsyncClient, kind: str) -> list[ModelInfo]:
                 local=True,
                 context_length=raw.get("max_context_length"),
                 prompt_price=0.0,
+                vision=vision,
             )
         )
     return models
@@ -321,6 +334,21 @@ async def list_models(redis: Redis, kind: str, refresh: bool = False) -> dict[st
     if models:
         await redis.set(cache_key, json.dumps(payload), ex=_ttl_for(models))
     return payload
+
+
+async def sees(redis: Redis, provider: str, model: str) -> bool | None:
+    """Whether this chat model takes pictures: True, False, or None when the
+    provider does not say or the model is not in the catalogue. Read from the
+    cached catalogue, so asking costs a Redis read on every run but the first."""
+    try:
+        payload = await list_models(redis, CHAT)
+    except Exception as exc:  # an unknown answer, never a failed run
+        log.info("could not read the model catalogue for vision: %s", exc)
+        return None
+    for entry in payload.get("groups", {}).get("all", []):
+        if entry.get("provider") == provider and entry.get("id") == model:
+            return entry.get("vision")
+    return None
 
 
 def _ttl_for(models: list[ModelInfo]) -> int:

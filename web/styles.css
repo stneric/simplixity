@@ -429,7 +429,42 @@ html.boot-collapsed .app .scrim { display: none; }
 .sidebar-item .icon { color: var(--fg-faint); transition: color 0.13s ease; }
 .sidebar-item:hover .icon { color: var(--fg-muted); }
 
-.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.main { position: relative; flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* Files dragged over the chat (app.js): the whole column is the target. The
+   overlay ignores the pointer so the drag events keep reaching .main. */
+.drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--fg-muted);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  pointer-events: none;
+  animation: drop-in 0.12s ease-out;
+}
+.drop-overlay[hidden] { display: none; }
+.drop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: 22rem;
+  padding: 0 16px;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+.drop-card .icon { color: var(--fg); margin-bottom: 4px; }
+.drop-card strong { font-size: 16px; font-weight: 600; color: var(--fg); }
+.drop-warn { margin-top: 6px; color: var(--warn); }
+.drop-warn[hidden] { display: none; }
+@keyframes drop-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .drop-overlay { animation: none; } }
 
 .topbar {
   display: flex;
@@ -639,7 +674,6 @@ html.boot-collapsed .app .scrim { display: none; }
 /* Attaching files (web/js/chat/attachments.js): a round paperclip, then one chip per
    file above the text, saying how much of it there is to search. */
 .attach-btn { width: 32px; padding: 0; justify-content: center; }
-.composer.dropping { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg-input)); }
 .attachments {
   display: flex;
   flex-wrap: wrap;
@@ -682,6 +716,30 @@ html.boot-collapsed .app .scrim { display: none; }
 }
 .attachment-remove:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg); }
 .attachment-remove:disabled { opacity: 0.35; }
+/* A picture's chip leads with the picture. */
+.attachment.image { padding-left: 6px; }
+.attachment-thumb {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-sm);
+  object-fit: cover;
+  background: var(--bg-hover);
+}
+.attachment.image[data-state="uploading"] .attachment-thumb { opacity: 0.55; }
+.attachment.image[data-state="warn"] .attachment-thumb { filter: grayscale(1); opacity: 0.7; }
+/* Above the composer while it holds pictures the chosen model cannot see. */
+.vision-note {
+  max-width: 46rem;
+  margin: 0 auto 8px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  font-size: 13px;
+  color: var(--fg);
+}
+.vision-note[hidden] { display: none; }
 .chats-toggle[aria-pressed="true"] { color: var(--accent-fg); background: var(--accent); border-color: transparent; }
 
 /* One glass button, two jobs: it sends while idle and stops the run while one
@@ -821,6 +879,22 @@ mark.quote {
 button.msg-file { background: none; font: inherit; font-size: 12.5px; cursor: pointer; }
 .msg-file span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg-file .icon-slot { flex: none; opacity: 0.75; display: inline-flex; }
+/* A picture a question went out with: the picture, not its name. */
+.msg-image {
+  display: block;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  line-height: 0;
+}
+.msg-image img {
+  display: block;
+  max-width: min(240px, 60vw);
+  max-height: 180px;
+  object-fit: cover;
+  background: var(--bg-hover);
+}
+.msg-image:hover { border-color: var(--fg-muted); }
 
 .block { 
   margin-bottom: 14px; 
@@ -1141,10 +1215,16 @@ details[open] .source-card {
   font-size: 12.5px;
   line-height: 1.6;
   color: var(--fg-muted);
-  white-space: pre-wrap;
   max-height: 320px;
   overflow-y: auto;
 }
+/* Rendered markdown, kept as small and quiet as the raw text was. */
+.thinking-body > :first-child { margin-top: 0; }
+.thinking-body > :last-child { margin-bottom: 0; }
+.thinking-body p, .thinking-body ul, .thinking-body ol, .thinking-body pre { margin: 0 0 8px; }
+.thinking-body ul, .thinking-body ol { padding-left: 20px; }
+.thinking-body h1, .thinking-body h2, .thinking-body h3, .thinking-body h4 { font-size: 13px; margin: 10px 0 4px; color: var(--fg); }
+.thinking-body strong { color: var(--fg); }
 
 .notice {
   display: flex;

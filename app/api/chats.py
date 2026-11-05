@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import Annotated
 from urllib.parse import unquote
 
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import APIRouter, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel, Field
 
 from app import runs
 from app.api.deps import ID_PATTERN, DbDep, RedisDep, UserDep
 from app.scholar import fulltext
 from app.store import attachments as attachment_store
-from app.store import chats, projects
+from app.store import chats, images, projects
 from app.tools import attachments
 
 router = APIRouter()
@@ -122,6 +122,25 @@ async def attach_file(chat_id: ChatId, request: Request, db: DbDep, user: UserDe
         return await attachments.upload(db, chat_id, name, data, user=user)
     except fulltext.FulltextError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/api/chats/{chat_id}/images/{image_id}")
+async def image(chat_id: ChatId, image_id: FileId, db: DbDep, user: UserDep) -> Response:
+    """A picture attached to the chat, for its thumbnail and for opening it.
+    Private, and cached as long as the browser likes: an id names one picture
+    for good, a different one gets a different id."""
+    found = await images.data_of(db, chat_id, image_id, user)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Unknown image")
+    data, mime = found
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={
+            "Cache-Control": "private, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.delete("/api/chats/{chat_id}/files/{file_id}")

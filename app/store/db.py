@@ -153,6 +153,23 @@ CREATE TABLE IF NOT EXISTS lit_chunks (
     vector  BLOB,
     model   TEXT
 );
+-- Pictures attached to a chat. Kept apart from `lit_files`: a picture has no
+-- text to read, cut or embed, it is handed to the model as it is, and holding
+-- one must not turn the chat into one that answers only from its files.
+-- `message_id` is the question it went out with, NULL until one does.
+CREATE TABLE IF NOT EXISTS chat_images (
+    id         TEXT PRIMARY KEY,
+    chat_id    TEXT NOT NULL,
+    user_id    TEXT NOT NULL,
+    message_id TEXT,
+    name       TEXT NOT NULL,
+    mime       TEXT NOT NULL,
+    sha256     TEXT NOT NULL,
+    size       INTEGER NOT NULL,
+    data       BLOB NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (chat_id, sha256)
+);
 """
 
 # Applied *after* the migrations: an index over a column that a migration is
@@ -171,6 +188,7 @@ CREATE INDEX IF NOT EXISTS idx_lit_chat      ON lit_collections(chat_id);
 CREATE INDEX IF NOT EXISTS idx_lit_papers    ON lit_papers(collection_id, decision);
 CREATE INDEX IF NOT EXISTS idx_lit_files     ON lit_files(collection_id, paper_id);
 CREATE INDEX IF NOT EXISTS idx_lit_chunks    ON lit_chunks(file_id, page);
+CREATE INDEX IF NOT EXISTS idx_chat_images   ON chat_images(chat_id, created_at);
 """
 
 # Every profile that owns something gets a row, so history written before the

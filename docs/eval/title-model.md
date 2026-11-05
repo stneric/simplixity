@@ -9,12 +9,13 @@ November 2026. Fine-tuned `Qwen/Qwen3.5-0.8B` to name chats, so that titles can 
 - **German vocabulary** is the weak point. "Rente" becomes "Rental" and "Süßstoff" becomes "Sugar".
 - **Size:** 834 MB at Q8_0, 542 MB at Q4_K_M, median 0.15 s per title on an M3 Pro.
 - **Training stopped at 0.84 epochs** because the Mac's GPU hung three times. I will resume on my desktop when I get the chance.
-- The model is on Hugging Face as [`stneric/simplixity-title-0.8b`](https://huggingface.co/stneric/simplixity-title-0.8b) (safetensors, for Ollama) and [`stneric/simplixity-title-0.8b-GGUF`](https://huggingface.co/stneric/simplixity-title-0.8b-GGUF) (for LM Studio and llama.cpp).
+- The model is on Hugging Face as [`stneric/simplixity-title-0.8b`](https://huggingface.co/stneric/simplixity-title-0.8b) (safetensors) and [`stneric/simplixity-title-0.8b-GGUF`](https://huggingface.co/stneric/simplixity-title-0.8b-GGUF) (for Ollama 0.40 or later, LM Studio and llama.cpp).
 
 ## Use it
 
 - **LM Studio:** download `simplixity-title-0.8b-v1-Q8_0.gguf` or the `Q4_K_M` file from the GGUF repo.
-- **Ollama:** download the safetensors repo and run `ollama create simplixity-title:0.8b-v1-q8_0 -f Modelfile --quantize q8_0` in it. Ollama 0.24 cannot load the GGUF, because it expects a different tensor layout for Qwen3.5.
+- **Ollama 0.40 or later:** `ollama pull hf.co/stneric/simplixity-title-0.8b-GGUF:Q8_0` (or `:Q4_K_M`).
+- **Older Ollama:** download the safetensors repo and run `ollama create simplixity-title:0.8b-v1-q8_0 -f Modelfile --quantize q8_0` in it. Ollama 0.24 cannot load the GGUF, because it expects a different tensor layout for Qwen3.5.
 
 Then turn on chat titles in the settings and pick the model as the title model. The model only works with the app's title prompt, which the app sends unchanged.
 
@@ -29,7 +30,18 @@ Then turn on chat titles in the settings and pick the model as the title model. 
 | Key term named | 82% | 89% | 89% | 89% | 91% |
 | Median per title | 0.14 s | 0.15 s | 0.13 s | 0.32 s | 0.30 s |
 
-Every format miss of v1 is a title with seven words instead of six. I did not find out why LM Studio's Q8_0 writes longer titles than Ollama's. Both get the same 63-token prompt. The Ollama sizes include the vision tower, which the GGUF files leave out.
+The Ollama columns ran on Ollama 0.24 with the model built from safetensors. Every format miss of v1 is a title with seven words instead of six. The Ollama sizes include the vision tower, which the GGUF files leave out.
+
+Ollama 0.40.14 loads the GGUF files as well, pulled straight from Hugging Face. Same 60 messages, three runs each:
+
+| | v1 GGUF, Ollama 0.40 Q8_0 | v1 GGUF, Ollama 0.40 Q4_K_M | v1 safetensors, Ollama 0.40 Q8_0 |
+| --- | --- | --- | --- |
+| Size | 833 MB | 541 MB | 1.0 GB |
+| All format rules | 94% | 92% | 96% |
+| Key term named | 91% | 91% | 89% |
+| Median per title | 0.11 s | 0.09 s | 0.13 s |
+
+The same Q8_0 file follows every rule in 94% of titles in Ollama and in 88% in LM Studio, and Ollama reads the chat template from the file just like LM Studio does. So the longer titles in LM Studio come from the runtime, not from the file or the template. Ollama 0.40 is also more than twice as fast as 0.24 with the safetensors build.
 
 The first run of each model, sorted by hand:
 

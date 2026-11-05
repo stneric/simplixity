@@ -41,6 +41,8 @@ const PATHS = {
   star: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z',
   tag: 'M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9zM7.5 7.5h.01',
   laptop: 'M5 5h14v10H5zM2 19h20',
+  // A picture attached to a chat, and the drop overlay's mark for one.
+  image: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM21 15l-5-5L5 21M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z',
   file: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h6',
   // The literature page: back to the chat, the .bib export, and "maybe".
   back: 'M19 12H5M11 18l-6-6 6-6',
@@ -66,6 +68,8 @@ const PATHS = {
   // agent/widgets.py. A condition the model improvises maps to nothing and
   // renders no icon, rather than the wrong one.
   clear: 'M12 4V2M12 22v-2M4 12H2M22 12h-2M5.6 5.6L4.2 4.2M19.8 19.8l-1.4-1.4M18.4 5.6l1.4-1.4M4.2 19.8l1.4-1.4M12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9z',
+  // The model's thoughts: a cloud, the shape thinking is drawn in.
+  thought: 'M7 18h10a4 4 0 0 0 .4-8 6 6 0 0 0-11.4 1.6A3.5 3.5 0 0 0 7 18z',
   cloudy: 'M7 18h10a4 4 0 0 0 .4-8 6 6 0 0 0-11.4 1.6A3.5 3.5 0 0 0 7 18z',
   'partly-cloudy': 'M8 6.5a3.5 3.5 0 0 1 6.6 1.2M5 3.6V2M2.5 6H1M8.5 3l-1-1M2.6 10l-1 1M9 19h8a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.3A3 3 0 0 0 9 19z',
   fog: 'M6 12h10a4 4 0 0 0 .4-8A6 6 0 0 0 5 5.6 3.5 3.5 0 0 0 6 12zM4 16h16M6 20h12',

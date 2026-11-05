@@ -14,7 +14,7 @@ import { ensureProfile, mountProfile } from '../shared/profile.js';
 import { mountTools } from '../tools/tools.js';
 import { ProjectBar, ProjectHome } from '../projects/project-view.js';
 import { Attachments } from '../chat/attachments.js';
-import { ACCEPT, accepted, fileSummary, filesBadge } from '../chat/attachments-core.js';
+import { ACCEPT, REFUSED, accepted, fileSummary, filesBadge, isImage, visionWarning } from '../chat/attachments-core.js';
 import { filesByMessage, modelLabel, stamp } from '../chat/turns-core.js';
 
 hydrate();
@@ -66,7 +66,7 @@ const sourceSwitch = new SourceSwitch($('source-switch'), (web) => {
 const attachments = new Attachments($('attachments'), { onChange: () => syncComposer() });
 const attachInput = $('attach-input');
 attachInput.accept = ACCEPT;
-$('attach').title = 'Attach PDF, Word, Markdown or text files: the answer is written from them';
+$('attach').title = 'Attach images, or PDF, Word, Markdown and text files to answer from';
 $('attach').addEventListener('click', () => attachInput.click());
 attachInput.addEventListener('change', () => {
   attachFiles([...attachInput.files]);
@@ -74,28 +74,77 @@ attachInput.addEventListener('change', () => {
 });
 
 function attachFiles(files) {
-  const usable = files.filter((file) => accepted(file.name));
-  const refused = files.filter((file) => !accepted(file.name)).map((file) => file.name);
-  if (refused.length) attachments.refuse(refused, 'Only PDF, Word (.docx), Markdown and text files can be attached.');
+  const usable = files.filter((file) => accepted(file));
+  const refused = files.filter((file) => !accepted(file)).map((file) => file.name);
+  if (refused.length) attachments.refuse(refused, REFUSED);
   if (usable.length) attachments.add(usable, state.chatId);
   input.focus();
 }
 
-// Dropped on the composer, or pasted into it, a file is attached the same way.
-form.addEventListener('dragover', (event) => {
-  if (!event.dataTransfer?.types?.includes('Files')) return;
+// Files dragged anywhere over the chat column are attached, not only onto the
+// composer: the composer is a small target at the bottom of a big window, and
+// a file dropped beside it used to be opened by the browser instead, leaving
+// the app. The overlay says where it lands, and warns before the drop when the
+// chosen model cannot see the pictures among them.
+//
+// Counted rather than toggled: dragenter and dragleave fire for every child the
+// pointer crosses, so "left" is only true once every enter has had its leave.
+const main = $('main');
+const dropOverlay = $('drop-overlay');
+const dropWarn = $('drop-warn');
+let dragDepth = 0;
+const carriesFiles = (event) => Boolean(event.dataTransfer?.types?.includes('Files'));
+
+function showDrop(event) {
+  // The types of the dragged files are known before the drop in most browsers
+  // (their names are not), which is enough to say whether a picture is among them.
+  const items = [...(event.dataTransfer?.items ?? [])].filter((item) => item.kind === 'file');
+  const pictures = items.filter((item) => isImage({ type: item.type })).length;
+  const { name, vision } = settings.chatModel();
+  const warning = visionWarning(vision, name, pictures);
+  dropWarn.textContent = warning ? `${name || 'This model'} can’t see images.` : '';
+  dropWarn.hidden = !warning;
+  dropOverlay.hidden = false;
+}
+
+function hideDrop() {
+  dragDepth = 0;
+  dropOverlay.hidden = true;
+}
+
+main.addEventListener('dragenter', (event) => {
+  if (!carriesFiles(event)) return;
   event.preventDefault();
-  form.classList.add('dropping');
+  dragDepth += 1;
+  if (dragDepth === 1) showDrop(event);
 });
-form.addEventListener('dragleave', (event) => {
-  if (!form.contains(event.relatedTarget)) form.classList.remove('dropping');
-});
-form.addEventListener('drop', (event) => {
-  form.classList.remove('dropping');
-  if (!event.dataTransfer?.files?.length) return;
+main.addEventListener('dragover', (event) => {
+  if (!carriesFiles(event)) return;
   event.preventDefault();
-  attachFiles([...event.dataTransfer.files]);
+  event.dataTransfer.dropEffect = 'copy';
 });
+main.addEventListener('dragleave', (event) => {
+  if (!carriesFiles(event)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) hideDrop();
+});
+main.addEventListener('drop', (event) => {
+  if (!carriesFiles(event)) return;
+  event.preventDefault();
+  hideDrop();
+  if (event.dataTransfer.files?.length) attachFiles([...event.dataTransfer.files]);
+});
+// A file dropped outside the chat (on the sidebar, say) must not make the
+// browser navigate away to it.
+for (const type of ['dragover', 'drop']) {
+  window.addEventListener(type, (event) => {
+    if (carriesFiles(event) && !main.contains(event.target)) event.preventDefault();
+  });
+}
+// A drag that ends outside the window never sends the leave that would match
+// its enter.
+window.addEventListener('dragend', hideDrop);
+document.addEventListener('visibilitychange', hideDrop);
 input.addEventListener('paste', (event) => {
   const files = [...(event.clipboardData?.files ?? [])];
   if (!files.length) return;
@@ -194,7 +243,19 @@ function webKey() {
   return isLibrary(project) ? project.id : `chat:${state.chatId ?? attachments.chatId ?? 'new'}`;
 }
 
+/** Pictures in the composer and a model that cannot see them: said above the
+ *  composer and on each chip, and the question is held back (see submit). */
+function syncVision() {
+  const { name, vision } = settings.chatModel();
+  attachments.setVision(vision);
+  const note = $('vision-note');
+  const text = visionWarning(vision, name, attachments.images);
+  note.textContent = text;
+  note.hidden = !text;
+}
+
 function syncComposer() {
+  syncVision();
   const badge = $('project-badge');
   const project = activeProject();
   const library = isLibrary(project);
@@ -295,9 +356,13 @@ function metaLine(className) {
 // question buried the question.
 const SHOWN_FILES = 2;
 
-function fileList(files) {
+function fileList(all) {
   const list = document.createElement('ul');
   list.className = 'msg-files';
+  // Pictures are shown as themselves, all of them: a question sends five at
+  // most, and a thumbnail is what says which photo the answer is about.
+  for (const image of all.filter((file) => file.kind === 'image')) list.append(imageItem(image));
+  const files = all.filter((file) => file.kind !== 'image');
   const folded = files.length > SHOWN_FILES;
   const shown = folded ? files.slice(0, SHOWN_FILES) : files;
   list.append(...shown.map(fileItem));
@@ -319,6 +384,24 @@ function fileList(files) {
     list.append(item);
   }
   return list;
+}
+
+function imageItem(file) {
+  const item = document.createElement('li');
+  const link = document.createElement('a');
+  link.className = 'msg-image';
+  link.href = file.url;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.title = file.name;
+  const img = document.createElement('img');
+  img.src = file.url;
+  img.alt = file.name;
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  link.append(img);
+  item.append(link);
+  return item;
 }
 
 function fileItem(file) {
@@ -424,6 +507,17 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const query = input.value.trim();
   if (!query || state.runId || waitingForFiles) return;
+  // Sent anyway, the pictures would be dropped on the server with a notice.
+  // Held here instead, where the person can still change the model or remove
+  // them, and the reason is on screen above the composer.
+  if (attachments.images && settings.chatModel().vision === false) {
+    syncVision();
+    $('vision-note').animate?.(
+      [{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }],
+      { duration: 220 },
+    );
+    return;
+  }
   const nav = state.nav;
   if (attachments.uploading) {
     // Asked while a file is still being read: the answer waits for it rather
@@ -702,7 +796,10 @@ settings.onChange = (values) => {
   depthChip.set(values.depth);
   lensChip.set(values.lenses);
   projectBar.sync();
+  // A model picked elsewhere may see where the last one did not.
+  syncVision();
 };
+settings.onCatalog = () => syncVision();
 await settings.init();
 // After settings: the redact tool remembers its local model there.
 mountTools($('open-tools'), { settings });

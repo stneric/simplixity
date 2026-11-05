@@ -13,9 +13,43 @@
 // looked like files that had never been sent. They still belong to the chat
 // and every later question answers from them, so `count` keeps them: the
 // composer stays set up for files, only the chips are gone.
+//
+// Pictures ride along in the same list, but they are not documents: they are
+// not searched, they do not turn the chat into one that answers only from its
+// files (`count` leaves them out), and they are shown to the model with the
+// question. A picture is scaled down here before it is uploaded, and its chip
+// warns when the chosen model cannot see (`setVision`).
 
 import { iconNode } from '../shared/icons.js';
-import { fileSummary, newChatId, unusable, uploadError } from './attachments-core.js';
+import { fileSummary, isImage, newChatId, scaledSize, unusable, uploadError } from './attachments-core.js';
+
+/** A picture scaled down to what a model looks at, or the file itself when it
+ *  is small enough or cannot be decoded here (the server then decides). A GIF
+ *  is left alone: scaling it would keep only its first frame. */
+async function shrink(file) {
+  if (file.type === 'image/gif' || typeof createImageBitmap !== 'function') return file;
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    return file;
+  }
+  const size = scaledSize(bitmap.width, bitmap.height, file.size);
+  if (!size) {
+    bitmap.close?.();
+    return file;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = size.width;
+  canvas.height = size.height;
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, size.width, size.height);
+  bitmap.close?.();
+  // PNG keeps transparency and sharp text in a screenshot; a photo is JPEG.
+  const type = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, type, 0.88));
+  if (!blob || (type === 'image/png' && blob.size > file.size)) return file;
+  return new File([blob], file.name, { type });
+}
 
 export class Attachments {
   /**
@@ -29,6 +63,15 @@ export class Attachments {
     this.sent = false;
     this.items = [];
     this.pending = new Set();
+    // Whether the chosen model sees: true, false, or null when nobody says.
+    this.vision = null;
+  }
+
+  /** The chosen model changed, or its catalogue entry arrived. */
+  setVision(vision) {
+    if (vision === this.vision) return;
+    this.vision = vision;
+    this.render();
   }
 
   /** Files that are stored and can be asked about. */
@@ -36,10 +79,16 @@ export class Attachments {
     return this.items.filter((item) => item.state === 'ready').map((item) => item.file);
   }
 
-  /** Files attached or on their way, sent or not: what the composer is set
-   *  up for. */
+  /** Documents attached or on their way, sent or not: what the composer is
+   *  set up for. Pictures are not counted: they do not make the chat answer
+   *  only from its files. */
   get count() {
-    return this.items.filter((item) => item.state !== 'error').length;
+    return this.items.filter((item) => item.state !== 'error' && !item.image).length;
+  }
+
+  /** Pictures waiting to go out with the next question, stored or on their way. */
+  get images() {
+    return this.items.filter((item) => item.image && !item.posted && item.state !== 'error').length;
   }
 
   /** Files stored and not yet sent with a question: what the next one carries. */
@@ -58,11 +107,14 @@ export class Attachments {
     this.chatId = chatId;
     this.sent = true;
     const waiting = new Set(draft.map((file) => file.id));
+    this.#forget(this.items);
     this.items = (files ?? []).map((file) => ({
       key: file.id,
       name: file.name,
       state: 'ready',
       file,
+      image: file.kind === 'image',
+      preview: file.kind === 'image' ? file.url : null,
       posted: !waiting.has(file.id),
     }));
     this.render();
@@ -75,10 +127,16 @@ export class Attachments {
         if (item.file) fetch(`/api/chats/${this.chatId}/files/${item.file.id}`, { method: 'DELETE' }).catch(() => {});
       }
     }
+    this.#forget(this.items);
     this.chatId = null;
     this.sent = false;
     this.items = [];
     this.render();
+  }
+
+  /** Let go of the local previews of these chips. */
+  #forget(items) {
+    for (const item of items) if (item.local) URL.revokeObjectURL(item.local);
   }
 
   /** The chat id the next question has to carry, or null when nothing was
@@ -108,7 +166,9 @@ export class Attachments {
   add(files, chatId) {
     this.chatId = chatId ?? this.chatId ?? newChatId();
     for (const file of files) {
-      const item = { key: `local-${Math.random()}`, name: file.name, state: 'uploading', file: null };
+      const image = isImage(file);
+      const local = image ? URL.createObjectURL(file) : null;
+      const item = { key: `local-${Math.random()}`, name: file.name, state: 'uploading', file: null, image, local, preview: local };
       this.items.push(item);
       const job = this.#upload(item, file, this.chatId).finally(() => this.pending.delete(job));
       this.pending.add(job);
@@ -122,8 +182,9 @@ export class Attachments {
     this.render();
   }
 
-  async #upload(item, file, chatId) {
+  async #upload(item, original, chatId) {
     try {
+      const file = item.image ? await shrink(original) : original;
       const response = await fetch(`/api/chats/${chatId}/files`, {
         method: 'POST',
         headers: {
@@ -140,6 +201,7 @@ export class Attachments {
       const existing = this.items.find((other) => other !== item && other.file?.id === body.file.id);
       if (existing) {
         existing.posted = false;
+        this.#forget([item]);
         this.items = this.items.filter((other) => other !== item);
       } else {
         Object.assign(item, { key: body.file.id, state: 'ready', file: body.file });
@@ -152,6 +214,7 @@ export class Attachments {
   }
 
   async #remove(item) {
+    this.#forget([item]);
     this.items = this.items.filter((other) => other !== item);
     this.render();
     if (item.file && this.chatId) {
@@ -166,8 +229,19 @@ export class Attachments {
     for (const item of shown) {
       const chip = document.createElement('li');
       chip.className = 'attachment';
-      chip.dataset.state = item.state === 'ready' && unusable(item.file) ? 'warn' : item.state;
-      chip.append(iconNode(item.state === 'error' ? 'alert' : 'file', 15));
+      const blind = item.image && this.vision === false && item.state !== 'error';
+      chip.dataset.state = blind || (item.state === 'ready' && unusable(item.file)) ? 'warn' : item.state;
+      if (item.image && item.preview && item.state !== 'error') {
+        chip.classList.add('image');
+        const thumb = document.createElement('img');
+        thumb.className = 'attachment-thumb';
+        thumb.src = item.preview;
+        thumb.alt = '';
+        thumb.decoding = 'async';
+        chip.append(thumb);
+      } else {
+        chip.append(iconNode(item.state === 'error' ? 'alert' : item.image ? 'image' : 'file', 15));
+      }
       const text = document.createElement('span');
       text.className = 'attachment-text';
       const name = document.createElement('span');
@@ -176,7 +250,15 @@ export class Attachments {
       const meta = document.createElement('span');
       meta.className = 'attachment-meta';
       meta.textContent =
-        item.state === 'uploading' ? 'Reading…' : item.state === 'error' ? item.error : fileSummary(item.file);
+        item.state === 'uploading'
+          ? item.image
+            ? 'Uploading…'
+            : 'Reading…'
+          : item.state === 'error'
+            ? item.error
+            : blind
+              ? 'This model can’t see images'
+              : fileSummary(item.file);
       text.append(name, meta);
       chip.title = `${item.name}\n${meta.textContent}`;
       const remove = document.createElement('button');

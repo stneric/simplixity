@@ -295,6 +295,11 @@ class RunContext:
     # picture of the subject, not the banner of whichever page ranked first.
     pictures: list[int] = field(default_factory=list)
     history: list[Message] = field(default_factory=list)
+    # The pictures the question is about, as content parts, and whether they
+    # came with an earlier question. Attached to the last user message of the
+    # writer's prompt (`research.write_answer`) and of the classifier's.
+    images: list[dict[str, Any]] = field(default_factory=list)
+    images_earlier: bool = False
     embedding_model: str | None = None
     embedding_provider: str = "openrouter"
     # The reranker's bill. Its own sink rather than a client's, because

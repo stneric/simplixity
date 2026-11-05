@@ -55,7 +55,10 @@ PART_CHARS = 3000
 _W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _TEXT_SUFFIXES = {".txt": TEXT, ".text": TEXT, ".md": MARKDOWN, ".markdown": MARKDOWN}
 
-UNSUPPORTED = "Only PDF, Word (.docx), Markdown and plain text files can be attached."
+UNSUPPORTED = (
+    "Only images (PNG, JPEG, WebP, GIF), PDF, Word (.docx), Markdown and plain text files "
+    "can be attached."
+)
 
 
 @dataclass(slots=True)

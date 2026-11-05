@@ -337,6 +337,8 @@ def classify(
     choose_lenses: bool = False,
     catalog: str = "",
     linked: list[tuple[int, str, str]] | None = None,
+    images: int = 0,
+    sees_images: bool = True,
 ) -> list[Message]:
     return [
         _system(
@@ -352,11 +354,61 @@ def classify(
             ),
             LIBRARY_CATALOG.format(catalog=catalog) if catalog else "",
             _classify_linked(linked or []),
+            _classify_images(images, sees_images),
             _today(),
         ),
         *history,
         {"role": "user", "content": query},
     ]
+
+
+CLASSIFY_IMAGES = """\
+The user attached {what} to this question{shown}. The answer is written
+by a model that sees {them}. A question about what is in {them} (describe it, read the text in
+it, explain the chart, solve the exercise, what is wrong with this code) is answered
+from the image: needs_search false. Search only when the question needs facts the
+image cannot show, and then write the queries about what the image shows (the
+product, the species, the place by name), never about "this image". wants_image is
+false unless the user asks to see *other* pictures."""
+
+
+def _classify_images(count: int, shown: bool) -> str:
+    if not count:
+        return ""
+    many = count > 1
+    return CLASSIFY_IMAGES.format(
+        what=f"{count} images" if many else "an image",
+        shown=", shown with it" if shown else ", which you cannot see; go by the words",
+        them="them" if many else "it",
+    )
+
+
+IMAGES_EARLIER = "(The images below were attached earlier in this conversation.)"
+
+
+def with_images(
+    messages: list[Message], images: list[dict[str, Any]], *, earlier: bool = False
+) -> list[Message]:
+    """The same prompt with the pictures attached to its last user message, in
+    the OpenAI content-part form every provider here takes.
+
+    Applied last, after the prompt has been measured and fitted
+    (`orchestrator._fit_to_window`), which counts characters of string content
+    and would not know what to make of a list.
+    """
+    if not images:
+        return messages
+    out = list(messages)
+    for index in range(len(out) - 1, -1, -1):
+        message = out[index]
+        if message.get("role") != "user" or not isinstance(message.get("content"), str):
+            continue
+        text = message["content"]
+        if earlier:
+            text = f"{text}\n\n{IMAGES_EARLIER}"
+        out[index] = {**message, "content": [{"type": "text", "text": text}, *images]}
+        return out
+    return messages
 
 
 def _classify_linked(pages: list[tuple[int, str, str]]) -> str:

@@ -47,7 +47,9 @@ CONTENT_SECURITY_POLICY = (
     "default-src 'self'; "
     "script-src 'self'; "
     "style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data: https:; "
+    # blob: for the preview of a picture being attached, shown from the file
+    # in hand before the upload has finished.
+    "img-src 'self' data: blob: https:; "
     "connect-src 'self'; "
     # Both fall back to default-src today. Spelled out because the service
     # worker and the manifest are load-bearing for the installed app, and a

@@ -42,3 +42,17 @@ test('a file goes with the first question asked after it was attached', () => {
   // Attached after the last question: still waiting in the composer.
   assert.deepEqual(draft.map((f) => f.id), ['d']);
 });
+
+test('a picture goes with the question that claimed it, not by time', () => {
+  const messages = [
+    { message_id: 'm1', created_at: '2026-10-08T10:00:00+00:00' },
+    { message_id: 'm2', created_at: '2026-10-08T11:00:00+00:00' },
+  ];
+  const files = [
+    { id: 'p', kind: 'image', message_id: 'm2', created_at: '2026-10-08T09:00:00+00:00' },
+    { id: 'q', kind: 'image', message_id: null, created_at: '2026-10-08T09:30:00+00:00' },
+  ];
+  const { perMessage, draft } = filesByMessage(messages, files);
+  assert.deepEqual(perMessage.map((list) => list.map((f) => f.id)), [[], ['p']]);
+  assert.deepEqual(draft.map((f) => f.id), ['q']);
+});

@@ -17,7 +17,7 @@ import aiosqlite
 
 from app.scholar import fulltext
 from app.store import attachments as store
-from app.store import library
+from app.store import images, library
 from app.tools import documents
 from app.tools.fulltext import current_tag, index
 
@@ -26,7 +26,16 @@ async def upload(
     conn: aiosqlite.Connection, chat_id: str, name: str, data: bytes, *, user: str
 ) -> dict[str, Any]:
     """Store a file under a chat and index it. Raises `FulltextError` with a
-    sentence the person can act on when the file cannot be used."""
+    sentence the person can act on when the file cannot be used.
+
+    A picture is stored as one (`store.images`) and not indexed: it has no text
+    to search, and is shown to the model with the question instead."""
+    if images.looks_like_image(data):
+        try:
+            image, new = await images.add(conn, chat_id, user, name, data)
+        except images.ImageError as exc:
+            raise fulltext.FulltextError(str(exc)) from exc
+        return {"file": image, "new": new, "index": None}
     document = await asyncio.to_thread(documents.read, name, data)
     collection = await store.collection_of(conn, chat_id, user, create=True)
     assert collection is not None
@@ -69,11 +78,16 @@ async def file_of(
 
 
 async def listed(conn: aiosqlite.Connection, chat_id: str, *, user: str) -> list[dict[str, Any]]:
-    """A chat's files, each counted as indexed against the current model."""
-    return await store.files(conn, chat_id, user, await current_tag(conn, user))
+    """A chat's files, each counted as indexed against the current model, and
+    its pictures, in the order they were attached."""
+    documents_ = await store.files(conn, chat_id, user, await current_tag(conn, user))
+    pictures = await images.listed(conn, chat_id, user)
+    return sorted([*documents_, *pictures], key=lambda f: str(f.get("created_at") or ""))
 
 
 async def remove(conn: aiosqlite.Connection, chat_id: str, file_id: str, *, user: str) -> bool:
+    if await images.remove(conn, chat_id, file_id, user):
+        return True
     collection = await store.collection_of(conn, chat_id, user)
     if collection is None:
         return False

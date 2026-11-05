@@ -502,9 +502,13 @@ export const renderers = {
     const root = el('div', `block thinking ${data.status ?? ''}`);
     const details = document.createElement('details');
     const summary = document.createElement('summary');
-    summary.append(iconNode('spark', 14), el('span', null, 'Thoughts'));
+    summary.append(iconNode('thought', 14), el('span', null, 'Thoughts'));
     details.append(summary);
-    details.append(el('div', 'thinking-body', data.content ?? ''));
+    // Markdown like the answer: reasoning models write lists, bold and code
+    // in their thoughts too, and shown raw it read as a page of asterisks.
+    const body = el('div', 'thinking-body');
+    renderMarkdown(body, data.content ?? '');
+    details.append(body);
     root.append(details);
     return root;
   },
@@ -1010,7 +1014,7 @@ const TRAY = {
     title: (d) => `Plan · ${plural((d.sub_questions ?? []).length, 'sub-question')}`,
   },
   thinking: {
-    icon: 'message',
+    icon: 'thought',
     when: (d, settled, prose) => settled || prose || d.status === 'done',
     title: () => 'Thoughts',
   },
@@ -1592,7 +1596,10 @@ function provenanceFooter(data) {
   // Who chose them matters as much as which: a run that searched Science
   // because the model decided to is a different claim from one the reader asked
   // for, and only the footer can say which happened.
-  if (lenses) {
+  // Only for a run that searched. The corpora are chosen before the router
+  // decides, so a question answered from the model alone, or from a picture,
+  // still carries them, and listing them claimed a search that never ran.
+  if (lenses && search.queries) {
     body.append(provRow('Sources searched', data.lenses_auto ? `${lenses} · chosen automatically` : lenses));
   }
   if (search.queries) body.append(provRow('Queries', String(search.queries)));

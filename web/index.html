@@ -90,7 +90,17 @@
       <button class="scrim" id="scrim" tabindex="-1" aria-label="Close sidebar"></button>
 
       <!-- ── main ────────────────────────────────────────────────── -->
-      <main class="main">
+      <main class="main" id="main">
+        <!-- Shown while files are dragged over the chat: the whole window takes
+             them, not only the composer (app.js). -->
+        <div class="drop-overlay" id="drop-overlay" hidden aria-hidden="true">
+          <div class="drop-card">
+            <i data-icon="upload" data-size="28"></i>
+            <strong>Drop to attach</strong>
+            <span>Images, PDF, Word, Markdown or text</span>
+            <span class="drop-warn" id="drop-warn" hidden></span>
+          </div>
+        </div>
         <header class="topbar">
           <!-- The only copies of both actions, so they stay put whether the
                sidebar is open or shut. -->
@@ -129,6 +139,8 @@
           <!-- Where the next question lands. A run scoped to a project without
                saying so is a state with no visible cause. -->
           <p class="project-badge" id="project-badge" hidden></p>
+          <!-- Pictures in the composer and a model that cannot see them. -->
+          <p class="vision-note" id="vision-note" role="status" hidden></p>
           <form class="composer" id="composer" autocomplete="off">
             <!-- Files attached to this chat (web/js/chat/attachments.js). With any, the
                  chat answers from them, as a literature project from its papers. -->

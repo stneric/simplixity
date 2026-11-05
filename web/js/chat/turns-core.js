@@ -39,6 +39,14 @@ export function filesByMessage(messages, files) {
   const perMessage = messages.map(() => []);
   const draft = [];
   for (const file of files ?? []) {
+    // A picture knows the question it went out with (`store.images.claim`);
+    // one that went with none is still the composer's.
+    if (file.kind === 'image') {
+      const at = file.message_id ? messages.findIndex((message) => message.message_id === file.message_id) : -1;
+      if (at === -1) draft.push(file);
+      else perMessage[at].push(file);
+      continue;
+    }
     const at = messages.findIndex((message) => String(message.created_at ?? '') >= String(file.created_at ?? ''));
     if (at === -1) draft.push(file);
     else perMessage[at].push(file);

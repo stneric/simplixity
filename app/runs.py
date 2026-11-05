@@ -22,11 +22,12 @@ from app.agent.orchestrator import RunRequest
 from app.agent.orchestrator import run as orchestrate
 from app.config import settings
 from app.llm import LLM
+from app.providers import catalog
 from app.search import lenses as lens_module
 from app.search.base import SearchResult
 from app.search.library import Library
 from app.search.project import search as project_search
-from app.store import attachments, chats, settings_store
+from app.store import attachments, chats, images, settings_store
 from app.store import library as library_store
 from app.store.db import DEFAULT_USER
 from app.store.stream import RunStream
@@ -172,6 +173,10 @@ async def _start(
         model=f"{resolved_provider}/{resolved_model}",
     )
 
+    pictures, earlier = await _pictures_of(
+        db, redis, resolved_chat_id, message_id, resolved_provider, resolved_model, user, warnings
+    )
+
     stream = RunStream(redis, run_id, ttl=settings.run_ttl_seconds)
     await stream.set_state(
         status="queued",
@@ -221,6 +226,8 @@ async def _start(
         else [],
         library=library,
         web=web if library is not None else True,
+        images=pictures,
+        images_earlier=earlier,
     )
 
     for warning in warnings:
@@ -288,6 +295,55 @@ async def _library_of(
         embedding_model=saved.embedding_model if saved.embedding_enabled else None,
         embedding_provider=saved.embedding_provider,
     )
+
+
+async def _pictures_of(
+    db: aiosqlite.Connection,
+    redis: Redis,
+    chat_id: str,
+    message_id: str,
+    provider: str,
+    model: str,
+    user: str,
+    warnings: list[str],
+) -> tuple[list[dict[str, Any]], bool]:
+    """The pictures this question is asked about, and whether they came with
+    an earlier question rather than this one.
+
+    The ones attached since the last question are claimed by this one. With
+    none, a follow-up is shown the pictures of the last question that had any:
+    "what does the sign on the left say" means the photo of a moment ago.
+
+    A model the catalogue says cannot see is given none, and the answer says
+    so. The composer warns before sending; this is the request that got past
+    it, or a literature model picked on another page.
+    """
+    try:
+        pictures = await images.claim(db, chat_id, user, message_id)
+        earlier = False
+        if not pictures:
+            pictures = await images.latest_sent(db, chat_id, user)
+            earlier = bool(pictures)
+    except Exception as exc:  # unreadable pictures: answered without them, said so
+        log.warning("could not read the images attached to chat %s: %s", chat_id, exc)
+        warnings.append(
+            "The images attached to this chat could not be read; this answer ignores them."
+        )
+        return [], False
+    if not pictures:
+        return [], False
+    if await catalog.sees(redis, provider, model) is False:
+        # Only said for pictures sent with this question: a follow-up in a chat
+        # that once had a photo is not about it, and a notice on every later
+        # answer would only be noise.
+        if not earlier:
+            warnings.append(
+                f"{model} cannot see images, so this answer was written without the "
+                f"{'image' if len(pictures) == 1 else f'{len(pictures)} images'} you attached. "
+                "Pick a model with vision to ask about them."
+            )
+        return [], False
+    return pictures, earlier
 
 
 async def _project_sources(

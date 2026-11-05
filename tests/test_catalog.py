@@ -273,3 +273,41 @@ def test_an_install_not_looking_for_local_runtimes_caches_for_the_hour(monkeypat
     monkeypatch.setattr(catalog.settings, "local_discovery", False)
 
     assert catalog._ttl_for([remote()]) == catalog.settings.model_cache_ttl_s
+
+
+async def test_vision_is_read_from_what_a_model_takes(monkeypatch, openrouter_only, redis):
+    patch_http(
+        monkeypatch,
+        {
+            "openrouter": {
+                "data": [
+                    {"id": "v/sees", "architecture": {"input_modalities": ["text", "image"]}},
+                    {"id": "v/blind", "architecture": {"input_modalities": ["text"]}},
+                    {"id": "v/unsaid"},
+                ]
+            }
+        },
+    )
+    models, _ = await catalog.discover(catalog.CHAT)
+    assert {m.id: m.vision for m in models} == {"v/sees": True, "v/blind": False, "v/unsaid": None}
+
+    await catalog.list_models(redis, catalog.CHAT)
+    assert await catalog.sees(redis, catalog.OPENROUTER, "v/sees") is True
+    assert await catalog.sees(redis, catalog.OPENROUTER, "v/blind") is False
+    # Not in the catalogue: unknown, which never refuses anything.
+    assert await catalog.sees(redis, catalog.OPENROUTER, "v/gone") is None
+
+
+async def test_ollama_says_vision_in_its_capabilities(monkeypatch):
+    monkeypatch.setattr(catalog.settings, "ollama_base_url", "http://ollama.test")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json={"models": [{"name": "llava"}, {"name": "llama3"}]})
+        name = __import__("json").loads(request.content)["model"]
+        caps = ["completion", "vision"] if name == "llava" else ["completion"]
+        return httpx.Response(200, json={"capabilities": caps})
+
+    async with REAL_ASYNC_CLIENT(transport=httpx.MockTransport(handler)) as client:
+        models = await catalog._ollama(client, catalog.CHAT)
+    assert {m.id: m.vision for m in models} == {"llava": True, "llama3": False}

@@ -27,7 +27,7 @@ from typing import Any
 
 import aiosqlite
 
-from app.store import library
+from app.store import images, library
 
 # How long a chat id may hold files before its first question. Generous: a
 # person attaches, gets distracted, comes back after lunch.
@@ -69,12 +69,15 @@ async def collection_of(
 
 
 async def taken(conn: aiosqlite.Connection, chat_id: str, user: str) -> bool:
-    """Whether another profile already attached files under this chat id."""
+    """Whether another profile already attached files or pictures under this
+    chat id."""
     async with conn.execute(
         "SELECT 1 FROM lit_collections WHERE chat_id = ? AND user_id != ? LIMIT 1",
         (chat_id, user),
     ) as cursor:
-        return await cursor.fetchone() is not None
+        if await cursor.fetchone() is not None:
+            return True
+    return await images.taken(conn, chat_id, user)
 
 
 async def files(
@@ -137,7 +140,8 @@ async def has_files(conn: aiosqlite.Connection, chat_id: str, user: str) -> bool
 
 async def delete_for_chat(conn: aiosqlite.Connection, chat_id: str) -> None:
     """Remove a chat's files with the chat. The files, pages and passages go by
-    cascade; the bytes once nothing else holds the same PDF."""
+    cascade; the bytes once nothing else holds the same PDF. Its pictures too."""
+    await images.delete_for_chat(conn, chat_id)
     cursor = await conn.execute("DELETE FROM lit_collections WHERE chat_id = ?", (chat_id,))
     if cursor.rowcount:
         await library.delete_orphan_blobs(conn)
@@ -159,4 +163,4 @@ async def reap_orphans(conn: aiosqlite.Connection) -> int:
     if reaped:
         await library.delete_orphan_blobs(conn)
     await conn.commit()
-    return reaped
+    return reaped + await images.reap_orphans(conn)

@@ -143,6 +143,11 @@ class RunRequest:
     # whether the person allowed the web beside them. See `RunContext.library`.
     library: Any = None
     web: bool = True
+    # The pictures the question is about, as content parts (`store.images`),
+    # and whether they came with an earlier question. Only ever set for a
+    # model that can see, or one the catalogue says nothing about.
+    images: list[dict[str, Any]] = field(default_factory=list)
+    images_earlier: bool = False
 
 
 def _lenses_for(request: RunRequest) -> list:
@@ -184,6 +189,8 @@ async def run(stream: RunStream, request: RunRequest) -> None:
         project_sources=list(request.project_sources),
         library=request.library,
         web=request.web,
+        images=list(request.images),
+        images_earlier=request.images_earlier,
     )
 
     await ctx.phase(blocks.PHASE_UNDERSTANDING)
@@ -231,7 +238,8 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
     # The pre-router first, because it costs nothing. It only answers when it is
     # certain, and None (ask the model) is its ordinary answer. Not with a link
     # in the question: "thanks https://…" is not small talk.
-    shortcut = None if urls else route_module.triage(ctx.query)
+    # Nor with a picture: "?" under a photo is a question about the photo.
+    shortcut = None if urls or ctx.images else route_module.triage(ctx.query)
     declined = ""
     if shortcut is not None and ctx.source_bound and shortcut.mode == route_module.LOOKUP:
         # A forecast is fetched from a web service, and this project has the web
@@ -819,15 +827,25 @@ async def _classify(ctx: RunContext, steps: Steps, pinned: linked.Linked) -> Cla
             # The router model when one is configured: this is the only call in
             # a run whose job is triage rather than writing, and it is the call
             # that stands between the user and the first byte of output.
+            # The pictures go to the classifier only when the chat model is the
+            # one classifying, the model known to see them. A separate router
+            # is told they are there and has to go by the words.
+            sees = ctx.router is None
             result = await (ctx.router or ctx.llm).structured(
-                prompts.classify(
-                    ctx.query,
-                    ctx.history,
-                    ctx.depth,
-                    ctx.lenses,
-                    choose_lenses=ctx.auto_lenses,
-                    catalog=ctx.catalog,
-                    linked=pinned.pages,
+                prompts.with_images(
+                    prompts.classify(
+                        ctx.query,
+                        ctx.history,
+                        ctx.depth,
+                        ctx.lenses,
+                        choose_lenses=ctx.auto_lenses,
+                        catalog=ctx.catalog,
+                        linked=pinned.pages,
+                        images=len(ctx.images),
+                        sees_images=sees,
+                    ),
+                    ctx.images if sees else [],
+                    earlier=ctx.images_earlier,
                 ),
                 Classification,
                 max_tokens=CLASSIFY_TOKENS,
@@ -835,6 +853,12 @@ async def _classify(ctx: RunContext, steps: Steps, pinned: linked.Linked) -> Cla
         except (LLMAuthError, LLMConfigError):
             raise
         except LLMError as exc:
+            if ctx.images:
+                # Asked about a picture: the picture is the evidence, and the
+                # raw question ("what is this?") is no search query.
+                log.info("classification failed, answering from the image: %s", exc)
+                step.text = "Answering from the image"
+                return Classification(needs_search=False, standalone_question=ctx.query)
             if pinned:
                 log.info("classification failed, answering from the linked page: %s", exc)
                 step.text = "Answering from the linked page"
@@ -851,7 +875,9 @@ async def _classify(ctx: RunContext, steps: Steps, pinned: linked.Linked) -> Cla
 
         # A picture asked for by name is not left to the model's reading.
         # Only ever raised: the words decide "yes", the model decides the rest.
-        if not result.wants_image and route_module.asks_to_see(ctx.query):
+        # Not with a picture attached: "what is in this picture" is about the
+        # one in hand, not a request to be shown another.
+        if not result.wants_image and not ctx.images and route_module.asks_to_see(ctx.query):
             log.info("the question asks for a picture by name; the classifier missed it")
             result.wants_image = True
         # A picture can only be shown if a search returned one, so asking to see

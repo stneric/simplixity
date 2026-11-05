@@ -327,6 +327,18 @@ export class Settings {
       this.title.load({ refresh }),
     ]);
     this.#syncAll();
+    // What the chat model can do is only known now; the composer asks.
+    this.onCatalog?.();
+  }
+
+  /** The chosen chat model: its name, and whether it sees pictures (true,
+   *  false, or null when the catalogue has not arrived or does not say). */
+  chatModel() {
+    const known = this.chatPickers?.[0]?.current;
+    return {
+      name: known?.name ?? this.values?.chat_model ?? '',
+      vision: known ? (known.vision ?? null) : null,
+    };
   }
 
   #syncChat() {
