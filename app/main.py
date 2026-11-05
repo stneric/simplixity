@@ -120,7 +120,7 @@ def _report_configuration() -> None:
 
 app = FastAPI(
     title="Simplixity",
-    version="0.2.0",
+    version="0.2.1",
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url=None,
