@@ -6,6 +6,9 @@ include breaking changes, which are called out.
 
 ## Unreleased
 
+## 0.2.2 (2026-11-11)
+Small fix for running local models. Adjusted for usage with the simplixity model family. Not yet available on hf but in testing.
+
 ## 0.2.1 (2026-11-05)
 - Images can be attached to a chat (PNG, JPEG, WebP, GIF): with the
   paperclip, by pasting, or by dropping them anywhere on the chat window,
