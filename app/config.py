@@ -129,9 +129,12 @@ class Settings(BaseSettings):
     # report citing "[Quelle impliziert durch den Kontext]", which is not a
     # model being stupid but a model being asked to cite a list it never saw.
     #
-    # The app fits its prompt to this number instead of finding out afterwards.
-    # Raising it means raising both: this decides how much is sent, and
-    # `OLLAMA_CONTEXT_LENGTH` decides how much is accepted.
+    # The app fits its prompt to the window instead of finding out afterwards,
+    # and asks the runtime for it per model (`catalog.context_window`): Ollama's
+    # `num_ctx` from the model's Modelfile, or the window a loaded model has.
+    # This number is only the fallback, for a model that has neither yet; it is
+    # what Ollama serves by default, so set it to `OLLAMA_CONTEXT_LENGTH` when
+    # the runtime sets that.
     local_context_tokens: int = 4096
     # Depth presets carry their own wall clock (see agent/depth.py); this is the
     # ceiling none of them may exceed.

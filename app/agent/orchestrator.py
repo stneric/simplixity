@@ -38,6 +38,7 @@ from app.agent.route import Route
 from app.config import settings
 from app.embed.rerank import passages_from
 from app.llm import LLM, LLMAuthError, LLMConfigError, LLMError
+from app.providers import catalog
 from app.search import lenses as lens_module
 from app.search import links
 from app.search import weather as weather_source
@@ -393,16 +394,15 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
             )
         )
 
-    passages, dropped, answer_tokens, compact = _fit_to_window(ctx, passages, build)
+    window = await local_window(ctx.llm)
+    passages, dropped, answer_tokens, compact = _fit_to_window(ctx, passages, build, window=window)
     if dropped:
         # Named, because the alternative is an answer that is quietly thinner
         # than the research behind it and says nothing about why.
         await ctx.notice(
-            f"The model's context window holds {settings.local_context_tokens} tokens, so "
-            f"{dropped} of {dropped + len(passages)} ranked passages were left out of the "
-            "prompt. Raise it on both sides to use them: OLLAMA_CONTEXT_LENGTH on the "
-            "runtime, LOCAL_CONTEXT_TOKENS here.",
-            "info",
+            f"{ctx.llm.model} reads {window} tokens, so the {dropped} lowest-ranked of "
+            f"{dropped + len(passages)} passages were left out of its prompt. A larger "
+            "window would use them.",
         )
     messages = build(passages, compact)
     if ctx.library is not None:
@@ -478,7 +478,17 @@ COMPACT_BELOW_TOKENS = 16_000
 WINDOW_SAFETY_TOKENS = 256
 
 
-def _fit_to_window(ctx: RunContext, passages: list, build: Any) -> tuple[list, int, int, bool]:
+async def local_window(llm: Any) -> int:
+    """The window a local model is served with, asked of its runtime; 0 for a
+    remote one, whose window is far larger than anything this app assembles."""
+    if not llm.is_local:
+        return 0
+    return await catalog.context_window(getattr(llm, "provider", ""), getattr(llm, "model", ""))
+
+
+def _fit_to_window(
+    ctx: RunContext, passages: list, build: Any, window: int | None = None
+) -> tuple[list, int, int, bool]:
     """Fit the writer's prompt to what the model will actually accept.
 
     Returns the passages that fit, how many did not, the tokens left for the
@@ -486,12 +496,14 @@ def _fit_to_window(ctx: RunContext, passages: list, build: Any) -> tuple[list, i
 
     Only local runtimes are budgeted: a remote model's window is far larger than
     anything this app assembles, and guessing at it would trim good evidence for
-    no reason. A local one is served by Ollama's default 4096-token window,
-    which truncates silently, so the choice is not "trim or don't" but "trim
-    here, by rank, with the numbering intact, or let the runtime cut the middle
-    out of the prompt".
+    no reason. A local one is served with whatever window its runtime gives
+    that model (`local_window`, by default Ollama's 4096), and truncates
+    silently past it, so the choice is not "trim or don't" but "trim here, by
+    rank, with the numbering intact, or let the runtime cut the middle out of
+    the prompt". Without `window`, `local_context_tokens` stands in for it.
     """
-    window = settings.local_context_tokens if ctx.llm.is_local else 0
+    if window is None:
+        window = settings.local_context_tokens if ctx.llm.is_local else 0
     if window <= 0:
         return passages, 0, ctx.depth.answer_tokens, False
 

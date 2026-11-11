@@ -256,6 +256,57 @@ async def _lmstudio(client: httpx.AsyncClient, kind: str) -> list[ModelInfo]:
     return models
 
 
+async def context_window(provider: str, model: str) -> int:
+    """How many tokens this local model will actually read.
+
+    The runtime decides, per model, and truncates silently past it, so the
+    prompt is fitted to the runtime's number rather than to a guess. Ollama
+    answers with the model's own `num_ctx` (its Modelfile, which a request
+    through the OpenAI endpoint cannot override) or, for a model without one
+    that is loaded, the window it was loaded with. LM Studio names the length a
+    loaded model was given. Anything else, an unloaded model with no setting of
+    its own or a runtime that is not answering, gets `local_context_tokens`,
+    which is what the runtime itself falls back to.
+    """
+    fallback = settings.local_context_tokens
+    try:
+        async with httpx.AsyncClient(timeout=settings.discovery_timeout_s) as client:
+            if provider == OLLAMA:
+                found = await _ollama_window(client, model)
+            elif provider == LMSTUDIO:
+                found = await _lmstudio_window(client, model)
+            else:
+                return fallback
+    except Exception as exc:  # a guess, never a failed run
+        log.debug("context window of %s/%s unknown: %s", provider, model, exc)
+        return fallback
+    return found if isinstance(found, int) and found > 0 else fallback
+
+
+async def _ollama_window(client: httpx.AsyncClient, model: str) -> int | None:
+    resp = await client.post(f"{settings.ollama_base_url}/api/show", json={"model": model})
+    resp.raise_for_status()
+    # "num_ctx                        8192", one parameter per line.
+    for line in (resp.json().get("parameters") or "").splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0] == "num_ctx" and parts[1].isdigit():
+            return int(parts[1])
+    resp = await client.get(f"{settings.ollama_base_url}/api/ps")
+    resp.raise_for_status()
+    wanted = model if ":" in model else f"{model}:latest"
+    for entry in resp.json().get("models", []):
+        if wanted in (entry.get("name"), entry.get("model")):
+            return entry.get("context_length")
+    return None
+
+
+async def _lmstudio_window(client: httpx.AsyncClient, model: str) -> int | None:
+    resp = await client.get(f"{settings.lmstudio_base_url}/api/v0/models/{model}")
+    resp.raise_for_status()
+    entry = resp.json()
+    return entry.get("loaded_context_length") if entry.get("state") == "loaded" else None
+
+
 # ------------------------------------------------------------------- public
 
 

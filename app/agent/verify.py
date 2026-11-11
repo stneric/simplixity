@@ -43,6 +43,7 @@ from app.agent.context import RunContext
 from app.config import settings
 from app.embed.rerank import Passage
 from app.llm import LLMError
+from app.providers import catalog
 
 log = logging.getLogger(__name__)
 
@@ -983,7 +984,7 @@ def _reply_tokens(claims: int) -> int:
     return max(VERIFY_TOKENS, claims * PER_VERDICT_TOKENS)
 
 
-def _plan_for_window(ctx: RunContext) -> tuple[int, int, int]:
+def _plan_for_window(ctx: RunContext, window: int | None = None) -> tuple[int, int, int]:
     """How many claims one call may carry, what the answer may cost, and how
     many characters of evidence fit beside them.
 
@@ -998,7 +999,8 @@ def _plan_for_window(ctx: RunContext) -> tuple[int, int, int]:
     anything assembled here. Either way the reply is given room for every
     verdict in the batch, since a reply cut off mid-object rules on nothing.
     """
-    window = settings.local_context_tokens if _judge(ctx).is_local else 0
+    if window is None:
+        window = settings.local_context_tokens if _judge(ctx).is_local else 0
     if window <= 0:
         return JUDGED_LIMIT, _reply_tokens(JUDGED_LIMIT), 0
 
@@ -1299,7 +1301,13 @@ async def check(
     # `unchecked` and is counted as such, which is the whole difference between
     # a limit and a blind spot.
     judgeable = _judgeable(claims)
-    per_call, reply_tokens, evidence_chars = _plan_for_window(ctx)
+    judge = _judge(ctx)
+    window = (
+        await catalog.context_window(getattr(judge, "provider", ""), getattr(judge, "model", ""))
+        if judge.is_local
+        else 0
+    )
+    per_call, reply_tokens, evidence_chars = _plan_for_window(ctx, window)
     groups = _batches(judgeable, per_call=per_call)
     # The check's own allowance past the preset: a call for every batch, as
     # many again for the halves of a batch whose reply did not parse, and one

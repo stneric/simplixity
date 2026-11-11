@@ -311,3 +311,52 @@ async def test_ollama_says_vision_in_its_capabilities(monkeypatch):
     async with REAL_ASYNC_CLIENT(transport=httpx.MockTransport(handler)) as client:
         models = await catalog._ollama(client, catalog.CHAT)
     assert {m.id: m.vision for m in models} == {"llava": True, "llama3": False}
+
+
+# ------------------------------------------------------------ context window
+
+
+async def test_the_window_is_the_models_own_num_ctx(monkeypatch):
+    """A model that brings its window in its Modelfile is fitted to that, not
+    to the install-wide default: an 8k writer must not be cut to 4k."""
+    monkeypatch.setattr(catalog.settings, "ollama_base_url", "http://ollama.test")
+    monkeypatch.setattr(catalog.settings, "local_context_tokens", 4096)
+    show = {"parameters": "draft_num_predict              2\nnum_ctx                        8192"}
+    patch_http(monkeypatch, {"/api/show": show})
+
+    assert await catalog.context_window(catalog.OLLAMA, "simplixity-writer") == 8192
+
+
+async def test_without_num_ctx_a_loaded_model_says_what_it_was_given(monkeypatch):
+    """OLLAMA_CONTEXT_LENGTH is invisible from here, but a model it loaded is not."""
+    monkeypatch.setattr(catalog.settings, "ollama_base_url", "http://ollama.test")
+    monkeypatch.setattr(catalog.settings, "local_context_tokens", 4096)
+    ps = {"models": [{"name": "qwen3:latest", "model": "qwen3:latest", "context_length": 32768}]}
+    patch_http(monkeypatch, {"/api/show": {"parameters": "temperature 0.6"}, "/api/ps": ps})
+
+    assert await catalog.context_window(catalog.OLLAMA, "qwen3") == 32768
+    assert await catalog.context_window(catalog.OLLAMA, "other:7b") == 4096
+
+
+async def test_an_unreachable_runtime_falls_back_to_the_setting(monkeypatch):
+    monkeypatch.setattr(catalog.settings, "ollama_base_url", "http://ollama.test")
+    monkeypatch.setattr(catalog.settings, "local_context_tokens", 6000)
+    patch_http(monkeypatch, {})
+
+    assert await catalog.context_window(catalog.OLLAMA, "anything") == 6000
+    assert await catalog.context_window(catalog.LMSTUDIO, "anything") == 6000
+    assert await catalog.context_window(catalog.OPENROUTER, "vendor/model") == 6000
+
+
+async def test_lm_studio_names_the_length_a_loaded_model_was_given(monkeypatch):
+    monkeypatch.setattr(catalog.settings, "lmstudio_base_url", "http://lms.test")
+    monkeypatch.setattr(catalog.settings, "local_context_tokens", 4096)
+    body = {
+        "id": "m",
+        "state": "loaded",
+        "max_context_length": 131072,
+        "loaded_context_length": 16384,
+    }
+    patch_http(monkeypatch, {"/api/v0/models/m": body})
+
+    assert await catalog.context_window(catalog.LMSTUDIO, "m") == 16384
