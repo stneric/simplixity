@@ -55,8 +55,8 @@ async def put_settings(
     body: settings_store.UISettings, db: DbDep, user: UserDep
 ) -> settings_store.UISettings:
     # Groq hosts no embedding models, so it is only a valid chat provider. The
-    # router and title providers may additionally be empty: that is how "use the
-    # chat model" is expressed, and it is the default for both.
+    # optional models' providers may additionally be empty, which is how a model
+    # that is switched off is saved, and means "where the chat model runs".
     chat_providers = (catalog.OPENROUTER, catalog.GROQ, catalog.OLLAMA, catalog.LMSTUDIO)
     allowed = {
         "chat_provider": chat_providers,

@@ -15,12 +15,11 @@ project is useful the moment a chat is moved into it, with nothing to rebuild.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
 
-from app.store.db import DEFAULT_USER
+from app.store.db import DEFAULT_USER, now, owned
 
 # How much of a past answer is carried as evidence. Long enough to hold the
 # substance of a section, short enough that five of them do not crowd the web
@@ -32,37 +31,26 @@ SNIPPET_CHARS = 1200
 # dropped, not a random sample.
 MAX_CORPUS_RESULTS = 8
 
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
-
-
-def _owned(sql: str, params: list[Any], user: str | None) -> tuple[str, list[Any]]:
-    """Narrow a statement ending in `WHERE id = ?` to one profile's rows.
-
-    `None` is every profile, for callers that already hold a chat's own project
-    id (a run reading its corpus) rather than one a browser sent.
-    """
-    if user is None:
-        return sql, params
-    return sql + " AND user_id = ?", [*params, user]
+# What a project is called when its name is only whitespace.
+UNTITLED = "Untitled project"
 
 
 async def create(
     conn: aiosqlite.Connection, name: str, *, user: str = DEFAULT_USER
 ) -> dict[str, Any]:
     project_id = uuid.uuid4().hex
-    now = _now()
+    name = name.strip() or UNTITLED
+    created = now()
     await conn.execute(
         "INSERT INTO projects (id, name, created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?)",
-        (project_id, name.strip() or "Untitled project", now, now, user),
+        (project_id, name, created, created, user),
     )
     await conn.commit()
     return {
         "id": project_id,
-        "name": name.strip(),
-        "created_at": now,
-        "updated_at": now,
+        "name": name,
+        "created_at": created,
+        "updated_at": created,
         "chats": 0,
     }
 
@@ -71,9 +59,9 @@ async def rename(
     conn: aiosqlite.Connection, project_id: str, name: str, *, user: str | None = None
 ) -> bool:
     cursor = await conn.execute(
-        *_owned(
+        *owned(
             "UPDATE projects SET name = ?, updated_at = ? WHERE id = ?",
-            [name.strip() or "Untitled project", _now(), project_id],
+            [name.strip() or UNTITLED, now(), project_id],
             user,
         )
     )
@@ -88,7 +76,7 @@ async def delete(conn: aiosqlite.Connection, project_id: str, *, user: str | Non
     grouping stopped being useful must not be a way to lose a month of work,
     and a confirmation dialog is not a safety property.
     """
-    cursor = await conn.execute(*_owned("DELETE FROM projects WHERE id = ?", [project_id], user))
+    cursor = await conn.execute(*owned("DELETE FROM projects WHERE id = ?", [project_id], user))
     if cursor.rowcount == 0:
         await conn.commit()
         return False
@@ -105,7 +93,7 @@ async def get(
     conn: aiosqlite.Connection, project_id: str, *, user: str | None = None
 ) -> dict[str, Any] | None:
     async with conn.execute(
-        *_owned(
+        *owned(
             "SELECT id, name, created_at, updated_at FROM projects WHERE id = ?",
             [project_id],
             user,
@@ -155,7 +143,7 @@ async def assign(conn: aiosqlite.Connection, chat_id: str, project_id: str | Non
     if project_id:
         # Ordering the sidebar by "last used" is what makes the project you are
         # working in the one at the top.
-        await conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (_now(), project_id))
+        await conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now(), project_id))
     await conn.commit()
     return cursor.rowcount > 0
 

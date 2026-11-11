@@ -919,18 +919,6 @@ def page_words(excerpt: str, content: str) -> str:
     return best if score >= EVIDENCE_OVERLAP else ""
 
 
-def _judge(ctx: RunContext):
-    """Who rules on the claims.
-
-    A judge model of its own wherever one is set (`judge_model`), and it should
-    be of another family than the writer: a model checking its own answer
-    shares the blind spots that wrote it. Without one, the triage model where
-    one is set, it is a reading task, except in a literature project: there
-    the verdicts are what a thesis rests on, and a fast model waved through
-    definitions its source never gave, so the writer's model judges those."""
-    return ctx.checker()
-
-
 def _pending(status: str, total: int) -> dict[str, object]:
     """What the block carries when there is no verdict in it: while the check
     runs, and when it could not run at all. Every count the renderer reads is
@@ -1000,7 +988,7 @@ def _plan_for_window(ctx: RunContext, window: int | None = None) -> tuple[int, i
     verdict in the batch, since a reply cut off mid-object rules on nothing.
     """
     if window is None:
-        window = settings.local_context_tokens if _judge(ctx).is_local else 0
+        window = settings.local_context_tokens if ctx.checker().is_local else 0
     if window <= 0:
         return JUDGED_LIMIT, _reply_tokens(JUDGED_LIMIT), 0
 
@@ -1028,7 +1016,6 @@ async def _report_uncited(ctx: RunContext, answer: str) -> dict[str, object] | N
     placeholders = [m.group(1) for m in _PLACEHOLDER.finditer(answer)]
     data: dict[str, object] = {
         **_pending(blocks.STATUS_UNCITED, 0),
-        "status": blocks.STATUS_UNCITED,
         # The words the model used instead of a number, so the reader can see
         # what happened rather than being told the answer is untrustworthy.
         "placeholders": sorted(set(placeholders))[:3],
@@ -1082,19 +1069,7 @@ def _evidence_for(
                 key = _comparable(excerpt)
                 if wanted in key and key not in shown:
                     shown.add(key)
-                    evidence.append(
-                        Passage(
-                            text=excerpt,
-                            source_index=number,
-                            title=source.title,
-                            url=source.url,
-                            domain=source.domain,
-                            tier=source.tier,
-                            tier_label=source.tier_label,
-                            published=source.published,
-                            read=True,
-                        )
-                    )
+                    evidence.append(_passage_of(source, number, excerpt, read=True))
                     break
 
     for index in sorted(cited - {passage.source_index for passage in evidence}):
@@ -1102,20 +1077,23 @@ def _evidence_for(
         text = (getattr(source, "evidence", "") or "").strip()
         if not text:
             continue
-        evidence.append(
-            Passage(
-                text=text[:FILL_IN_CHARS],
-                source_index=index,
-                title=source.title,
-                url=source.url,
-                domain=source.domain,
-                tier=source.tier,
-                tier_label=source.tier_label,
-                published=source.published,
-                read=bool(source.content),
-            )
-        )
+        evidence.append(_passage_of(source, index, text[:FILL_IN_CHARS], read=bool(source.content)))
     return evidence
+
+
+def _passage_of(source: object, index: int, text: str, *, read: bool) -> Passage:
+    """Text of a registered source as a passage the judge can be shown."""
+    return Passage(
+        text=text,
+        source_index=index,
+        title=source.title,
+        url=source.url,
+        domain=source.domain,
+        tier=source.tier,
+        tier_label=source.tier_label,
+        published=source.published,
+        read=read,
+    )
 
 
 async def _second_look(
@@ -1147,7 +1125,7 @@ async def _second_look(
             evidence, _dropped = prompts.fit_passages(evidence, max_chars=evidence_chars)
         try:
             ctx.budget.spend_llm()
-            breakdown = await _judge(ctx).structured(
+            breakdown = await ctx.checker().structured(
                 prompts.verify_parts(question, claim, prompts.format_evidence(evidence)),
                 Breakdown,
                 max_tokens=max(VERIFY_TOKENS, reply_tokens // 2),
@@ -1245,7 +1223,7 @@ async def _rule(
         evidence, _dropped = prompts.fit_passages(evidence, max_chars=evidence_chars)
     try:
         ctx.budget.spend_llm()
-        support = await _judge(ctx).structured(
+        support = await ctx.checker().structured(
             prompts.verify(question, batch, prompts.format_evidence(evidence)),
             Support,
             max_tokens=reply_tokens,
@@ -1301,12 +1279,7 @@ async def check(
     # `unchecked` and is counted as such, which is the whole difference between
     # a limit and a blind spot.
     judgeable = _judgeable(claims)
-    judge = _judge(ctx)
-    window = (
-        await catalog.context_window(getattr(judge, "provider", ""), getattr(judge, "model", ""))
-        if judge.is_local
-        else 0
-    )
+    window = await catalog.window_of(ctx.checker())
     per_call, reply_tokens, evidence_chars = _plan_for_window(ctx, window)
     groups = _batches(judgeable, per_call=per_call)
     # The check's own allowance past the preset: a call for every batch, as

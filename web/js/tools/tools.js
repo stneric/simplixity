@@ -7,6 +7,7 @@
 // models should say so before anyone pastes a contract into it.
 
 import { iconNode } from '../shared/icons.js';
+import { el } from '../shared/dom.js';
 
 export const TOOLS = [
   {
@@ -30,13 +31,6 @@ export const TOOLS = [
     open: (ctx) => import('./redact-view.js').then((m) => m.openRedact(ctx)),
   },
 ];
-
-function el(tag, className = '', text = '') {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text) node.textContent = text;
-  return node;
-}
 
 /** The list of tools, as a small dialog. Choosing one closes it and opens the
  *  tool, which brings its own dialog. */

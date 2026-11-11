@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import httpx
 
+from app import __version__
+
 _client: httpx.AsyncClient | None = None
 
 
@@ -26,7 +28,9 @@ def client() -> httpx.AsyncClient:
             timeout=httpx.Timeout(30.0, connect=10.0),
             limits=httpx.Limits(max_connections=64, max_keepalive_connections=16),
             follow_redirects=True,
-            headers={"User-Agent": "simplixity/0.1 (+https://github.com/stneric/simplixity)"},
+            headers={
+                "User-Agent": f"simplixity/{__version__} (+https://github.com/stneric/simplixity)"
+            },
         )
     return _client
 

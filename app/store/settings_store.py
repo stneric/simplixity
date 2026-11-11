@@ -7,16 +7,13 @@ configuration to a cleared browser cache.
 
 from __future__ import annotations
 
-import json
-from datetime import UTC, datetime
-
 import aiosqlite
 from pydantic import BaseModel, Field, field_validator
 
 from app.agent import depth as depth_module
 from app.config import settings as env
 from app.search import lenses as lens_module
-from app.store.db import DEFAULT_USER
+from app.store.db import DEFAULT_USER, now
 
 SETTINGS_KEY = "ui"
 
@@ -77,7 +74,7 @@ class UISettings(BaseModel):
     literature_provider: str = ""
     literature_model: str = ""
     # The model that rules on the citations once an answer is written
-    # (`verify._judge`). Empty keeps the old rule: the router on the web, the
+    # (`RunContext.checker`). Empty keeps the old rule: the router on the web, the
     # writer's own model in a literature project. A model of another family is
     # the point of setting one: a writer judging itself shares its own blind
     # spots, and waves through the sentence it was sure enough to write. Hence
@@ -131,16 +128,32 @@ def _key(user: str) -> str:
     return SETTINGS_KEY if user == DEFAULT_USER else f"{SETTINGS_KEY}:{user}"
 
 
-async def load(conn: aiosqlite.Connection, user: str = DEFAULT_USER) -> UISettings:
-    async with conn.execute("SELECT value FROM settings WHERE key = ?", (_key(user),)) as cursor:
+async def _read(conn: aiosqlite.Connection, key: str) -> str | None:
+    async with conn.execute("SELECT value FROM settings WHERE key = ?", (key,)) as cursor:
         row = await cursor.fetchone()
-    if row is None:
+    return row["value"] if row else None
+
+
+async def _write(conn: aiosqlite.Connection, key: str, value: BaseModel) -> None:
+    await conn.execute(
+        """
+        INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        """,
+        (key, value.model_dump_json(), now()),
+    )
+    await conn.commit()
+
+
+async def load(conn: aiosqlite.Connection, user: str = DEFAULT_USER) -> UISettings:
+    raw = await _read(conn, _key(user))
+    if raw is None:
         # A new profile starts from the default profile's choices rather than
         # the environment's: whoever set the install up already picked models
         # that work here, and a second person should not have to find them again.
         return UISettings() if user == DEFAULT_USER else await load(conn, DEFAULT_USER)
     try:
-        return UISettings.model_validate_json(row["value"])
+        return UISettings.model_validate_json(raw)
     except Exception:
         # A stored blob from an older schema must not brick the app.
         return UISettings()
@@ -149,18 +162,7 @@ async def load(conn: aiosqlite.Connection, user: str = DEFAULT_USER) -> UISettin
 async def save(
     conn: aiosqlite.Connection, value: UISettings, user: str = DEFAULT_USER
 ) -> UISettings:
-    await conn.execute(
-        """
-        INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-        """,
-        (
-            _key(user),
-            json.dumps(value.model_dump()),
-            datetime.now(UTC).isoformat(),
-        ),
-    )
-    await conn.commit()
+    await _write(conn, _key(user), value)
     return value
 
 
@@ -206,14 +208,11 @@ def _favorites_key(user: str) -> str:
 
 
 async def load_favorites(conn: aiosqlite.Connection, user: str = DEFAULT_USER) -> Favorites:
-    async with conn.execute(
-        "SELECT value FROM settings WHERE key = ?", (_favorites_key(user),)
-    ) as cursor:
-        row = await cursor.fetchone()
-    if row is None:
+    raw = await _read(conn, _favorites_key(user))
+    if raw is None:
         return Favorites()
     try:
-        return Favorites.model_validate_json(row["value"])
+        return Favorites.model_validate_json(raw)
     except Exception:
         # Same courtesy as `load`: an unreadable row is an empty list, not a 500.
         return Favorites()
@@ -222,12 +221,5 @@ async def load_favorites(conn: aiosqlite.Connection, user: str = DEFAULT_USER) -
 async def save_favorites(
     conn: aiosqlite.Connection, value: Favorites, user: str = DEFAULT_USER
 ) -> Favorites:
-    await conn.execute(
-        """
-        INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-        """,
-        (_favorites_key(user), value.model_dump_json(), datetime.now(UTC).isoformat()),
-    )
-    await conn.commit()
+    await _write(conn, _favorites_key(user), value)
     return value

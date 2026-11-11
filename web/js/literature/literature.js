@@ -25,6 +25,7 @@ import { confirmDialog, promptDialog } from '../shared/dialog.js';
 import { outbound } from '../render/links.js';
 import { ModelPicker } from '../shared/picker.js';
 import * as core from './literature-core.js';
+import { el } from '../shared/dom.js';
 
 hydrate();
 
@@ -35,13 +36,6 @@ const GREETING =
   'I will ask what I need to know, then search.';
 
 const $ = (id) => document.getElementById(id);
-
-function el(tag, className = '', text = '') {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text) node.textContent = text;
-  return node;
-}
 
 function button(label, className = 'confirm-btn', icon = '') {
   const node = el('button', className);
@@ -721,7 +715,7 @@ function renderTabs() {
       tab.type = 'button';
       tab.setAttribute('role', 'tab');
       tab.setAttribute('aria-selected', String(filter.id === state.filter));
-      tab.append(el('span', '', filter.label), el('span', 'lit-tab-count', filter.count));
+      tab.append(el('span', '', filter.label), el('span', 'lit-tab-count', filter.count || ''));
       if (filter.id === 'fulltext' && texts.unassigned.length) {
         tab.append(el('span', 'lit-tab-alert', String(texts.unassigned.length)));
         tab.title = `${texts.unassigned.length} uploaded PDF(s) waiting to be assigned`;

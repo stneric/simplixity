@@ -114,25 +114,15 @@ DEEP = Depth(
     answer_tokens=4000,
 )
 
-AUTO = Depth(
+# Never spent. `agent/route.plan()` resolves AUTO into one of the presets before
+# a Budget is built, and `resolve()` is the belt to that brace. Its numbers are
+# BALANCED's, derived rather than copied, so a path which somehow skipped the
+# router degrades to the everyday setting rather than to nonsense.
+AUTO = replace(
+    BALANCED,
     id="auto",
     label="Auto",
     description="Matches the effort to the question. A lookup stays a lookup.",
-    # Never spent. `agent/route.plan()` resolves AUTO into one of the presets
-    # below before a Budget is built, and `resolve()` is the belt to that
-    # brace: the numbers here mirror BALANCED so that a path which somehow
-    # skipped the router degrades to the everyday setting rather than to
-    # nonsense.
-    queries=3,
-    results_per_query=24,
-    max_sources=10,
-    fetch_pages=5,
-    passages=14,
-    sub_questions=0,
-    max_rounds=0,
-    wall_clock_s=240.0,
-    max_llm_calls=13,
-    answer_tokens=2000,
 )
 
 # Below QUICK, and not user-selectable: the router derives it for a question it
@@ -149,8 +139,6 @@ SIMPLE = replace(
     label="Simple",
     description="One search, the best page read. For questions with one answer.",
     queries=1,
-    results_per_query=18,
-    max_sources=6,
     # One page, because "simple" means *one good source settles it*, and a
     # source that is never opened settles nothing. Asked what DiCaprio's parents
     # did, a run at this preset put both Wikipedia articles in its source list,

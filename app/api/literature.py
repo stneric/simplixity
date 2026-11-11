@@ -10,7 +10,6 @@ as missing.
 from __future__ import annotations
 
 import re
-from pathlib import Path as PathLib
 from typing import Annotated, Any
 from urllib.parse import quote, unquote
 
@@ -18,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
+from app import web
 from app.api.deps import ID_PATTERN, DbDep, UserDep, rate_limit
 from app.config import settings
 from app.llm.client import LLMError
@@ -28,8 +28,6 @@ from app.store import literature as store
 from app.tools import documents, fulltext, literature
 
 router = APIRouter()
-
-WEB_DIR = PathLib(__file__).resolve().parent.parent.parent / "web"
 
 CollectionId = Annotated[str, Path(pattern=ID_PATTERN)]
 FileId = Annotated[str, Path(pattern=ID_PATTERN)]
@@ -302,10 +300,12 @@ async def index_files(collection_id: CollectionId, db: DbDep, user: UserDep) -> 
     }
 
 
-async def _owned_file(db, file_id: str, user: str) -> None:
+async def _owned_file(db, file_id: str, user: str) -> str:
+    """The collection a file is in, or 404 when it is not this profile's."""
     owner = await library.owner_of(db, file_id)
     if owner is None or owner[1] != user:
         raise HTTPException(status_code=404, detail="Unknown file")
+    return owner[0]
 
 
 @router.get("/api/literature/files/{file_id}/pdf")
@@ -331,11 +331,10 @@ async def read_file(file_id: FileId, db: DbDep, user: UserDep) -> Response:
 @router.get("/api/literature/files/{file_id}")
 async def file_info(file_id: FileId, db: DbDep, user: UserDep) -> dict:
     """What the reader shows around a PDF: the file and the paper it is."""
-    await _owned_file(db, file_id, user)
-    owner = await library.owner_of(db, file_id)
-    file = await library.get_file(db, owner[0], file_id)  # type: ignore[index]
+    collection_id = await _owned_file(db, file_id, user)
+    file = await library.get_file(db, collection_id, file_id)
     paper = (
-        await store.get_paper(db, owner[0], file["paper_id"])  # type: ignore[index]
+        await store.get_paper(db, collection_id, file["paper_id"])
         if file and file.get("paper_id")
         else None
     )
@@ -359,6 +358,4 @@ async def cited_page(
     which renders the PDF on that page with the cited passages marked. The
     passages travel in the fragment, so this page is the same for every
     citation, and what it may read is checked by the API it calls."""
-    return FileResponse(
-        WEB_DIR / "reader.html", headers={"Cache-Control": "no-cache, must-revalidate"}
-    )
+    return web.page("reader.html")

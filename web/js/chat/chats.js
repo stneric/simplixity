@@ -7,15 +7,9 @@ import { icon } from '../shared/icons.js';
 import { confirmDialog } from '../shared/dialog.js';
 import { CHAT_MIME, DELETE_KEYS, projectPicker } from '../projects/projects.js';
 import { label } from '../shared/shortcuts.js';
+import { el } from '../shared/dom.js';
 
 const DEBOUNCE_MS = 250;
-
-const el = (tag, className, text) => {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text != null) node.textContent = text;
-  return node;
-};
 
 const startOfDay = (date) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();

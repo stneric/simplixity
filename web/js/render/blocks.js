@@ -11,13 +11,7 @@ import { citedText, paperNumbers, renderMarkdown } from './markdown.js';
 import { renderDiagram } from './diagram.js';
 import { renderSparkline } from './spark.js';
 import { attachPreview, onBrokenImage } from './preview.js';
-
-const el = (tag, className, text) => {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text != null) node.textContent = text;
-  return node;
-};
+import { el } from '../shared/dom.js';
 
 function head(name, label) {
   const node = el('div', 'block-head');

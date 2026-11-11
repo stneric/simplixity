@@ -117,7 +117,6 @@ class StreamTrace:
     max_tokens" and "retry". This records enough to tell them apart.
     """
 
-    content_chars: int = 0
     reasoning_chars: int = 0
     finish_reason: str = ""
     # What the provider actually ran. Under `openrouter/auto` this is a
@@ -683,7 +682,6 @@ async def _parse_sse(
             content = delta.get("content") or ""
             reasoning = delta.get("reasoning") or ""
             if trace is not None:
-                trace.content_chars += len(content)
                 trace.reasoning_chars += len(reasoning)
             if content or reasoning:
                 yield Delta(content=content, reasoning=reasoning)

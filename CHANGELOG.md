@@ -5,6 +5,18 @@ All notable changes are listed here. The project follows
 include breaking changes, which are called out.
 
 ## Unreleased
+- An earlier answer reused as a project source no longer carries its own
+  direct-quotation citations (`[3 quote: "…"]`) into the new answer, where the
+  number would have pointed at a different source.
+- A project created with a name of only spaces shows as "Untitled project"
+  straight away, not as a blank row until the page is reloaded.
+- A malformed session cookie is answered with the profile picker, not with a
+  server error.
+- A router model saved without a provider runs where the chat model does, as
+  the title, judge and literature models already did.
+- The `TRUSTED_HOSTS` setting is gone. It was read and never used.
+- Internal clean-up: one copy each of the helpers that had been repeated across
+  the store, the image proxies, the agent and the frontend.
 
 ## 0.3.0 (2026-11-11)
 - Thoughts can be opened while the model is still thinking. The box used to

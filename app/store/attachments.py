@@ -28,6 +28,7 @@ from typing import Any
 import aiosqlite
 
 from app.store import images, library
+from app.store.db import now
 
 # How long a chat id may hold files before its first question. Generous: a
 # person attaches, gets distracted, comes back after lunch.
@@ -36,10 +37,6 @@ ORPHAN_AFTER = timedelta(days=1)
 # person with forty PDFs wants a literature project, and the search that ranks
 # their pages was tuned on a few dozen papers, not on a few hundred.
 MAX_FILES = 20
-
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 async def collection_of(
@@ -55,14 +52,14 @@ async def collection_of(
         row = await cursor.fetchone()
     if row is not None or not create:
         return dict(row) if row else None
-    now = _now()
+    created = now()
     collection_id = uuid.uuid4().hex
     await conn.execute(
         """
         INSERT INTO lit_collections (id, user_id, project_id, chat_id, name, created_at, updated_at)
         VALUES (?, ?, NULL, ?, '', ?, ?)
         """,
-        (collection_id, user, chat_id, now, now),
+        (collection_id, user, chat_id, created, created),
     )
     await conn.commit()
     return await collection_of(conn, chat_id, user)

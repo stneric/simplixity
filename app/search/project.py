@@ -23,12 +23,12 @@ The consequences are the point:
 from __future__ import annotations
 
 import logging
-import re
 
 import aiosqlite
 
 from app.search import quality
-from app.search.base import INTERNAL_PREFIX, KIND_PAPER, SearchResult
+from app.search.base import INTERNAL_PREFIX, KIND_PAPER, SearchResult, uncited
+from app.search.library import opens_at
 from app.store import literature, projects
 
 log = logging.getLogger(__name__)
@@ -37,9 +37,6 @@ log = logging.getLogger(__name__)
 # be read from a different host than the one that wrote it. `INTERNAL_PREFIX` is
 # what tells the deduper this is a source and not a malformed link.
 CHAT_URL = INTERNAL_PREFIX + "{chat_id}"
-# A citation in an earlier answer, `[3]` or `[3: "…"]`. The same pattern as
-# `prompts._OLD_CITATION`, repeated because search must not import the agent.
-_OLD_CITATION = re.compile(r'\s?\[\d{1,3}(?::\s*(?:["“„«»][^"“”„«»\n]*["”“»«]\s*[,;]?\s*)+)?\]')
 
 
 async def search(
@@ -78,7 +75,7 @@ async def search(
         (_paper_result, row, f"{row['data'].get('title', '')} {row['data'].get('abstract', '')}")
         for row in rows
         # A source the reader cannot open cannot be checked.
-        if row["data"].get("pdf") or row["data"].get("link") or row["data"].get("url")
+        if opens_at(row["data"])
     ]
     scores = quality.relevance_scores(question, [text for _, _, text in candidates])
     floor = quality.relevance_floor(scores)
@@ -109,7 +106,7 @@ def _paper_result(row: dict, relevance: float) -> SearchResult:
         title=data.get("title") or "Paper",
         # The PDF where a database named one: a click on a paper is a request
         # to read it, not to land on the publisher's abstract page.
-        url=data.get("pdf") or data.get("link") or data.get("url") or "",
+        url=opens_at(data),
         snippet=abstract[: projects.SNIPPET_CHARS],
         content=abstract[: projects.SNIPPET_CHARS],
         engine="reading list",
@@ -137,7 +134,7 @@ def _as_result(doc: dict, relevance: float) -> SearchResult:
     """
     # Without its citation numbers: they point at that run's sources, and here
     # the reader's "[3]" would read as this run's source 3.
-    answer = _OLD_CITATION.sub("", doc.get("answer") or "").strip()
+    answer = uncited(doc.get("answer") or "").strip()
     result = SearchResult(
         title=doc.get("chat_title") or doc.get("query") or "Earlier answer",
         url=CHAT_URL.format(chat_id=doc["chat_id"]),

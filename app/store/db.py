@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import aiosqlite
 
@@ -17,6 +19,23 @@ log = logging.getLogger(__name__)
 # The profile everything belongs to when nobody has picked one, and the owner of
 # every row written before profiles existed. See `api.deps.current_user`.
 DEFAULT_USER = "default"
+
+
+def now() -> str:
+    """The timestamp every row is written with: UTC, ISO 8601."""
+    return datetime.now(UTC).isoformat()
+
+
+def owned(sql: str, params: list[Any], user: str | None) -> tuple[str, list[Any]]:
+    """Narrow a statement ending in a `WHERE` clause to one profile's rows.
+
+    `None` is every profile, for internal callers that already hold an id of
+    their own (a run reading its chat's project) rather than one a browser sent.
+    """
+    if user is None:
+        return sql, params
+    return sql + " AND user_id = ?", [*params, user]
+
 
 TABLES = """
 CREATE TABLE IF NOT EXISTS chats (

@@ -24,6 +24,7 @@ from app.agent import shapes
 from app.agent.depth import Depth
 from app.embed.rerank import Passage
 from app.search import lenses as lens_module
+from app.search.base import uncited
 from app.search.lenses import Lens
 from app.search.lenses import query_hints as lens_hints
 
@@ -1611,25 +1612,6 @@ def fit_passages(passages: list[Passage], *, max_chars: int) -> tuple[list[Passa
     return kept, len(passages) - len(kept)
 
 
-# A citation in an earlier answer: `[3]`, or a passage citation `[3: "…"]`.
-_OLD_CITATION = re.compile(
-    r'\s?\[\d{1,3}(?:(?:\s*[Qq]uote)?:\s*(?:["“„«»][^"“”„«»\n]*["”“»«]\s*[,;]?\s*)+)?\]'
-)
-
-
-def _uncited(text: str) -> str:
-    """An earlier answer with its citation numbers taken out.
-
-    Those numbers belong to the run that wrote them. Each run numbers its own
-    sources from one, so the `[4]` of the last answer is a different page in
-    this one, and a model that sees "[4: "…"]" beside a claim in the history
-    repeats the pair, now pointing at a source that never said it. Without the
-    numbers, the earlier answer is what it should be here: context for what
-    "it" and "that" mean, not evidence.
-    """
-    return _OLD_CITATION.sub("", text)
-
-
 def trim_history(
     history: list[Message], *, max_turns: int = 6, max_chars: int = 6000
 ) -> list[Message]:
@@ -1644,7 +1626,7 @@ def trim_history(
     for message in reversed(recent):
         content = str(message.get("content") or "")
         if message.get("role") == "assistant":
-            content = _uncited(content)
+            content = uncited(content)
         total += len(content)
         if total > max_chars and kept:
             break

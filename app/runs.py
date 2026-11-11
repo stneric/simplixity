@@ -8,8 +8,10 @@ is the only place that knows all three.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -69,6 +71,26 @@ class RunHandle:
     lenses: list[str]
 
 
+@contextlib.contextmanager
+def _slot() -> Iterator[None]:
+    """Hold one of the run slots while a run is being set up.
+
+    Claimed, not merely checked: setup awaits the database several times, and a
+    check alone let every request in that gap take the last slot. Spawning is
+    the last thing setup does and takes the slot over (`spawn(claimed=True)`),
+    so a failure before it means no run did, and the slot is handed back.
+    """
+    if not runner.claim():
+        raise AtCapacity(
+            f"{settings.max_concurrent_runs} runs are already in flight. Wait for one to finish."
+        )
+    try:
+        yield
+    except BaseException:
+        runner.release()
+        raise
+
+
 async def start(
     *,
     redis: Redis,
@@ -85,188 +107,158 @@ async def start(
     user: str = DEFAULT_USER,
 ) -> RunHandle:
     """Create the run, persist the pending turn, and hand it to the supervisor."""
-    # Claimed, not merely checked: setup below awaits the database several
-    # times, and a check alone let every request in that gap take the last slot.
-    if not runner.claim():
-        raise AtCapacity(
-            f"{settings.max_concurrent_runs} runs are already in flight. Wait for one to finish."
-        )
-    try:
-        return await _start(
-            redis=redis,
-            db=db,
+    with _slot():
+        # The request may override the saved choice, but never has to repeat it.
+        saved = await settings_store.load(db, user)
+        resolved_model = model or saved.chat_model
+        resolved_provider = provider or saved.chat_provider
+        resolved_depth = depth_module.get(depth or saved.depth).id
+        # `normalise`, not `resolve`: "auto" is a choice the run has to see, not an
+        # unknown id to drop on the way in.
+        resolved_lenses = lens_module.normalise(lenses or saved.lenses)
+
+        run_id = uuid.uuid4().hex
+        resolved_chat_id = chat_id or uuid.uuid4().hex
+
+        is_new_chat = await chats.ensure_chat(db, resolved_chat_id, query, project_id, user=user)
+        history = [] if is_new_chat else await chats.history(db, resolved_chat_id)
+
+        # A chat in a literature project answers from its papers, and a chat with
+        # files attached from those files. Decided here, on the server, from where
+        # the chat is filed and what is stored under it, never from what the client
+        # says: the switch in the composer can turn the web *on*, but nothing a
+        # request carries can make a thesis project forget it is one.
+        #
+        # `warnings` is what setup could not do. Each becomes a notice at the top
+        # of the answer: a project whose papers could not be read answers from
+        # the web, and that must not look like an ordinary answer from the papers.
+        warnings: list[str] = []
+        library = await _library_of(db, resolved_chat_id, saved, user, warnings)
+        if library is not None:
+            # The composer shows no depth or source chips here, only the web
+            # switch, so the router decides depth, and on the web it picks the
+            # corpora as well.
+            resolved_depth = depth_module.AUTO.id
+            resolved_lenses = [lens_module.LIBRARY.id] + ([lens_module.AUTO] if web else [])
+            # Written by the literature model, the one the person picked on the
+            # literature page for work on their papers, rather than by the everyday
+            # chat model: a thesis answer quotes passages word for word and cites
+            # every sentence, and a fast model does both noticeably worse. A model
+            # the request names explicitly still wins, as everywhere. Not for a
+            # chat that only has files attached: the person picked that model for
+            # their papers, and a question about a letter is an ordinary chat.
+            if not model and saved.literature_model and library.project_id:
+                resolved_model = saved.literature_model
+                resolved_provider = provider or saved.literature_provider or saved.chat_provider
+        message_id = await chats.start_message(
+            db,
+            chat_id=resolved_chat_id,
+            run_id=run_id,
             query=query,
-            chat_id=chat_id,
-            model=model,
-            provider=provider,
-            depth=depth,
-            lenses=lenses,
-            project_id=project_id,
-            web=web,
-            earlier_chats=earlier_chats,
-            user=user,
+            depth=resolved_depth,
+            model=f"{resolved_provider}/{resolved_model}",
         )
-    except BaseException:
-        # Spawning is the last thing `_start` does, so a failure here means no
-        # run took the slot over.
-        runner.release()
-        raise
 
-
-async def _start(
-    *,
-    redis: Redis,
-    db: aiosqlite.Connection,
-    query: str,
-    chat_id: str | None,
-    model: str | None,
-    provider: str | None,
-    depth: str | None,
-    lenses: list[str] | None,
-    project_id: str | None,
-    web: bool,
-    earlier_chats: bool,
-    user: str,
-) -> RunHandle:
-    # The request may override the saved choice, but never has to repeat it.
-    saved = await settings_store.load(db, user)
-    resolved_model = model or saved.chat_model
-    resolved_provider = provider or saved.chat_provider
-    resolved_depth = depth_module.get(depth or saved.depth).id
-    # `normalise`, not `resolve`: "auto" is a choice the run has to see, not an
-    # unknown id to drop on the way in.
-    resolved_lenses = lens_module.normalise(lenses or saved.lenses)
-
-    run_id = uuid.uuid4().hex
-    resolved_chat_id = chat_id or uuid.uuid4().hex
-
-    is_new_chat = await chats.ensure_chat(db, resolved_chat_id, query, project_id, user=user)
-    history = [] if is_new_chat else await chats.history(db, resolved_chat_id)
-
-    # A chat in a literature project answers from its papers, and a chat with
-    # files attached from those files. Decided here, on the server, from where
-    # the chat is filed and what is stored under it, never from what the client
-    # says: the switch in the composer can turn the web *on*, but nothing a
-    # request carries can make a thesis project forget it is one.
-    # What setup could not do. Each becomes a notice at the top of the answer:
-    # a project whose papers could not be read answers from the web, and that
-    # must not look like an ordinary answer from the papers.
-    warnings: list[str] = []
-    library = await _library_of(db, resolved_chat_id, saved, user, warnings)
-    if library is not None:
-        # The composer shows no depth or source chips here, only the web
-        # switch, so the router decides depth, and on the web it picks the
-        # corpora as well.
-        resolved_depth = depth_module.AUTO.id
-        resolved_lenses = [lens_module.LIBRARY.id] + ([lens_module.AUTO] if web else [])
-        # Written by the literature model, the one the person picked on the
-        # literature page for work on their papers, rather than by the everyday
-        # chat model: a thesis answer quotes passages word for word and cites
-        # every sentence, and a fast model does both noticeably worse. A model
-        # the request names explicitly still wins, as everywhere. Not for a
-        # chat that only has files attached: the person picked that model for
-        # their papers, and a question about a letter is an ordinary chat.
-        if not model and saved.literature_model and library.project_id:
-            resolved_model = saved.literature_model
-            resolved_provider = provider or saved.literature_provider or saved.chat_provider
-    message_id = await chats.start_message(
-        db,
-        chat_id=resolved_chat_id,
-        run_id=run_id,
-        query=query,
-        depth=resolved_depth,
-        model=f"{resolved_provider}/{resolved_model}",
-    )
-
-    pictures, earlier = await _pictures_of(
-        db, redis, resolved_chat_id, message_id, resolved_provider, resolved_model, user, warnings
-    )
-
-    stream = RunStream(redis, run_id, ttl=settings.run_ttl_seconds)
-    await stream.set_state(
-        status="queued",
-        phase="starting",
-        depth=resolved_depth,
-        lenses=",".join(resolved_lenses),
-        model=resolved_model,
-        provider=resolved_provider,
-        chat_id=resolved_chat_id,
-        message_id=message_id,
-        query=query,
-        cancel="0",
-    )
-
-    request = RunRequest(
-        query=query,
-        chat_id=resolved_chat_id,
-        model=resolved_model,
-        provider=resolved_provider,
-        depth=resolved_depth,
-        lenses=[i for i in resolved_lenses if i != lens_module.LIBRARY.id],
-        embedding_model=saved.embedding_model if saved.embedding_enabled else None,
-        embedding_provider=saved.embedding_provider,
-        # Empty means "the chat model triages too".
-        router_model=_reachable(saved.router_model, saved.router_provider) or None,
-        router_provider=saved.router_provider or "openrouter",
-        judge_model=_reachable(saved.judge_model, saved.judge_provider or saved.chat_provider)
-        or None,
-        judge_provider=saved.judge_provider or saved.chat_provider,
-        home_location=saved.home_location or settings.home_location,
-        history=history,
-        # Retrieved here rather than inside the run: this module is the only one
-        # that knows about both storage and the agent, and keeping it that way
-        # is why the agent has never needed a database handle. Scored against
-        # the raw question. The classifier's standalone rewrite would be
-        # marginally better and would cost the whole retrieval a round-trip's
-        # wait behind it.
-        # Only when the request asks (`ChatRequest.chats`, the composer's Chats
-        # switch). Always on would, in a literature project, let an answer
-        # written with the web on launder the web back in; the reader decides
-        # per question, and an earlier answer is cited as what it is,
-        # `This project · …`, never as a paper.
-        project_sources=await _project_sources(
-            db, resolved_chat_id, query, warnings, papers=library is None
+        pictures, earlier = await _pictures_of(
+            db,
+            redis,
+            resolved_chat_id,
+            message_id,
+            resolved_provider,
+            resolved_model,
+            user,
+            warnings,
         )
-        if earlier_chats
-        else [],
-        library=library,
-        web=web if library is not None else True,
-        images=pictures,
-        images_earlier=earlier,
-    )
 
-    for warning in warnings:
-        await stream.emit_block(agent_blocks.notice_block(warning))
+        # A model saved without a provider runs where the chat model does, the
+        # rule every optional model follows (`_title_spec`, `tools.literature`).
+        router_provider = saved.router_provider or saved.chat_provider
+        judge_provider = saved.judge_provider or saved.chat_provider
 
-    runner.spawn(
-        stream,
-        lambda s: orchestrate(s, request),
-        finalize=_finalizer(db),
-        claimed=True,
-    )
-    # Named while the answer is still being written, not after it: the call
-    # needs nothing but the question, and a title that only turned up once the
-    # answer was done reached the open page after its last refresh, so it was
-    # first seen on a reload.
-    title = _title_spec(saved) if is_new_chat else None
-    if title is not None:
-        task = asyncio.create_task(
-            _title(db, stream, resolved_chat_id, query, title), name=f"title:{run_id}"
+        stream = RunStream(redis, run_id, ttl=settings.run_ttl_seconds)
+        await stream.set_state(
+            status="queued",
+            phase="starting",
+            depth=resolved_depth,
+            lenses=",".join(resolved_lenses),
+            model=resolved_model,
+            provider=resolved_provider,
+            chat_id=resolved_chat_id,
+            message_id=message_id,
+            query=query,
+            cancel="0",
         )
-        _titling.add(task)
-        task.add_done_callback(_titling.discard)
-    log.info(
-        "run %s started · chat=%s depth=%s sources=%s model=%s/%s",
-        run_id,
-        resolved_chat_id,
-        resolved_depth,
-        "+".join(resolved_lenses),
-        resolved_provider,
-        resolved_model,
-    )
-    return RunHandle(
-        run_id, resolved_chat_id, message_id, resolved_depth, resolved_model, resolved_lenses
-    )
+
+        request = RunRequest(
+            query=query,
+            chat_id=resolved_chat_id,
+            model=resolved_model,
+            provider=resolved_provider,
+            depth=resolved_depth,
+            lenses=[i for i in resolved_lenses if i != lens_module.LIBRARY.id],
+            embedding_model=saved.embedding_model if saved.embedding_enabled else None,
+            embedding_provider=saved.embedding_provider,
+            # Empty means "the chat model triages too".
+            router_model=_reachable(saved.router_model, router_provider) or None,
+            router_provider=router_provider,
+            judge_model=_reachable(saved.judge_model, judge_provider) or None,
+            judge_provider=judge_provider,
+            home_location=saved.home_location or settings.home_location,
+            history=history,
+            # Retrieved here rather than inside the run: this module is the only one
+            # that knows about both storage and the agent, and keeping it that way
+            # is why the agent has never needed a database handle. Scored against
+            # the raw question. The classifier's standalone rewrite would be
+            # marginally better and would cost the whole retrieval a round-trip's
+            # wait behind it.
+            # Only when the request asks (`ChatRequest.chats`, the composer's Chats
+            # switch). Always on would, in a literature project, let an answer
+            # written with the web on launder the web back in; the reader decides
+            # per question, and an earlier answer is cited as what it is,
+            # `This project · …`, never as a paper.
+            project_sources=await _project_sources(
+                db, resolved_chat_id, query, warnings, papers=library is None
+            )
+            if earlier_chats
+            else [],
+            library=library,
+            web=web if library is not None else True,
+            images=pictures,
+            images_earlier=earlier,
+        )
+
+        for warning in warnings:
+            await stream.emit_block(agent_blocks.notice_block(warning))
+
+        runner.spawn(
+            stream,
+            lambda s: orchestrate(s, request),
+            finalize=_finalizer(db),
+            claimed=True,
+        )
+        # Named while the answer is still being written, not after it: the call
+        # needs nothing but the question, and a title that only turned up once the
+        # answer was done reached the open page after its last refresh, so it was
+        # first seen on a reload.
+        title = _title_spec(saved) if is_new_chat else None
+        if title is not None:
+            task = asyncio.create_task(
+                _title(db, stream, resolved_chat_id, query, title), name=f"title:{run_id}"
+            )
+            _titling.add(task)
+            task.add_done_callback(_titling.discard)
+        log.info(
+            "run %s started · chat=%s depth=%s sources=%s model=%s/%s",
+            run_id,
+            resolved_chat_id,
+            resolved_depth,
+            "+".join(resolved_lenses),
+            resolved_provider,
+            resolved_model,
+        )
+        return RunHandle(
+            run_id, resolved_chat_id, message_id, resolved_depth, resolved_model, resolved_lenses
+        )
 
 
 async def _library_of(
@@ -424,7 +416,7 @@ def _reachable(model: str, provider: str) -> str:
     means: the chat model triages and names chats, and the judge follows its
     old rule.
     """
-    if model and (provider or "openrouter") == "openrouter" and not settings.openrouter_api_key:
+    if model and provider == catalog.OPENROUTER and not settings.openrouter_api_key:
         return ""
     return model
 

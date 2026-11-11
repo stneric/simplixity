@@ -212,8 +212,6 @@ const projectHome = new ProjectHome($('project-home'), {
   onAsk: () => input.focus(),
 });
 
-/** What the page shows when no chat is open: the project's page inside a
- *  project, the welcome everywhere else. */
 // ── heading ──────────────────────────────────────────────────────────
 
 const heading = $('chat-heading');
@@ -234,6 +232,8 @@ function syncHeading() {
   if (chat) setHeading(chat.title);
 }
 
+/** What the page shows when no chat is open: the project's page inside a
+ *  project, the welcome everywhere else. */
 function showLanding() {
   const project = activeProject();
   if (project) {
@@ -250,13 +250,6 @@ function showLanding() {
 function activeProject() {
   const id = state.chatId ? state.chatProject : projectList.selectedId;
   return projectList.projects.find((p) => p.id === id) ?? null;
-}
-
-/** Says which project the next question lands in, above the composer, and
- *  shows the controls that project takes. A literature project has one: the
- *  Local/Web switch, in place of depth and sources (source-switch.js). */
-function updateProjectBadge() {
-  syncComposer();
 }
 
 /** Where the Web switch's position is remembered: per literature project, or
@@ -277,9 +270,11 @@ function syncVision() {
   note.hidden = !text;
 }
 
+/** Show the controls the next question takes, and name its project in the bar
+ *  above. A literature project, or a chat with files attached, has one control:
+ *  the Local/Web switch, in place of depth and sources (source-switch.js). */
 function syncComposer() {
   syncVision();
-  const badge = $('project-badge');
   const project = activeProject();
   const library = isLibrary(project);
   const files = attachments.count;
@@ -291,7 +286,6 @@ function syncComposer() {
   sourceSwitch.set(web);
   if (library) sourceSwitch.setTip(libraryBadge(project, web));
   else sourceSwitch.setTip(filesBadge(files, web), 'the attached files');
-  badge.hidden = true;
   const chats = Boolean(project && chatsByProject.get(project.id));
   chatsToggle.hidden = !project;
   chatsToggle.setAttribute('aria-pressed', String(chats));
@@ -371,14 +365,14 @@ function metaLine(className) {
   return { line, set };
 }
 
-/** The files a question went out with, inside its bubble, each opening in the
- *  reader. Shown there rather than left in the composer, where they looked as
- *  if they had never been sent. */
 // Files named on a question before the rest fold into "+N Paper": one row,
 // however many were sent. Eight chips stacked four rows high above a one-line
 // question buried the question.
 const SHOWN_FILES = 2;
 
+/** The files a question went out with, inside its bubble, each opening in the
+ *  reader. Shown there rather than left in the composer, where they looked as
+ *  if they had never been sent. */
 function fileList(all) {
   const list = document.createElement('ul');
   list.className = 'msg-files';
@@ -855,7 +849,7 @@ await lensChip.init(settings.values.lenses);
 await projectList.load();
 chatList.projectId = projectList.selectedId;
 chatList.projects = projectList.projects;
-updateProjectBadge();
+syncComposer();
 await chatList.load();
 
 const requested = new URLSearchParams(location.hash.slice(1)).get('chat');

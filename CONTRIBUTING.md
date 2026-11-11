@@ -53,9 +53,12 @@ have, extend the stub.
 - **Dependencies.** There are eight runtime dependencies. A ninth has to be
   pure Python with no build step. There is deliberately no provider SDK.
 - **Frontend.** No framework, no build step, no CDN. Never assign `innerHTML`
-  with anything derived from model output; build nodes with `createElement`
-  and `textContent`. Links go through `web/js/render/links.js`.
+  with anything derived from model output; build nodes with `el()` from
+  `web/js/shared/dom.js` (`createElement` and `textContent`). Links go through
+  `web/js/render/links.js`.
 - **Schema changes** are additive migrations in `app/store/db.py`.
+- **The version** is written in `pyproject.toml` and `app/__init__.py`; a test
+  fails when they differ.
 - **Prompts** all live in `app/agent/prompts.py`.
 - Typographic characters (’ “ ” — ×) in prose and prompts are intentional and
   allowed in ruff's configuration.

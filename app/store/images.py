@@ -24,6 +24,8 @@ from typing import Any
 
 import aiosqlite
 
+from app.store.db import now
+
 # What the providers accept, by magic bytes. Anything else is refused before it
 # is stored: a HEIC from a phone would be stored, shown as broken, and rejected
 # by every model it was sent to.
@@ -63,10 +65,6 @@ def mime_of(data: bytes) -> str | None:
 
 def looks_like_image(data: bytes) -> bool:
     return mime_of(data) is not None
-
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 def _public(row: dict[str, Any]) -> dict[str, Any]:
@@ -111,14 +109,13 @@ async def add(
     if count >= MAX_IMAGES:
         raise ImageError(f"A chat holds at most {MAX_IMAGES} images.")
     image_id = uuid.uuid4().hex
-    now = _now()
     await conn.execute(
         """
         INSERT INTO chat_images (id, chat_id, user_id, message_id, name, mime, sha256, size,
                                  data, created_at)
         VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
         """,
-        (image_id, chat_id, user, (name or "image")[:200], mime, sha, len(data), data, now),
+        (image_id, chat_id, user, (name or "image")[:200], mime, sha, len(data), data, now()),
     )
     await conn.commit()
     return await get(conn, chat_id, image_id, user), True

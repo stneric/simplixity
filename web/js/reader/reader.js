@@ -26,18 +26,12 @@ import * as pdfjs from '../../vendor/pdfjs/pdf.min.mjs';
 import { hydrate } from '../shared/icons.js';
 import { ensureProfile } from '../shared/profile.js';
 import { locate, parseHash } from './reader-core.js';
+import { el } from '../shared/dom.js';
 
 hydrate();
 pdfjs.GlobalWorkerOptions.workerSrc = '/static/vendor/pdfjs/pdf.worker.min.mjs';
 
 const $ = (id) => document.getElementById(id);
-const el = (tag, className = '', text = '') => {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text) node.textContent = text;
-  return node;
-};
-
 // Wide enough to read a two-column paper at a glance, never wider: past this a
 // line of text is longer than the eye can follow back.
 const MAX_WIDTH = 920;

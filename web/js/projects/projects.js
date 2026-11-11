@@ -8,14 +8,7 @@
 import { iconNode } from '../shared/icons.js';
 import { confirmDialog, promptDialog } from '../shared/dialog.js';
 import { KEYS, keycap, label } from '../shared/shortcuts.js';
-
-const el = (tag, className, text) => {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text != null) node.textContent = text;
-  return node;
-};
-
+import { el } from '../shared/dom.js';
 
 /** Both, because a Mac keyboard has no Del: the key under the finger reaching
  *  to delete a row reports itself as Backspace there and as Delete on a PC. */

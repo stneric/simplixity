@@ -403,14 +403,6 @@ html.boot-collapsed .app .scrim { display: none; }
 .project-menu:focus-visible { opacity: 1; }
 .project-menu:hover { background: var(--bg-active); color: var(--fg); }
 
-/* Above the composer: which project the next question lands in. */
-.project-badge {
-  margin: 0 0 6px;
-  font-size: 12px;
-  color: var(--fg-faint);
-}
-.project-badge[hidden] { display: none; }
-
 .sidebar-foot { border-top: 1px solid var(--line); padding-top: 6px; margin-top: 2px; }
 .sidebar-item {
   display: flex;

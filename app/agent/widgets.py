@@ -244,12 +244,18 @@ class Figure(Card):
     @field_validator("direction")
     @classmethod
     def _known_direction(cls, value: str) -> str:
-        return value if value in ("up", "down", "flat") else ""
+        return _direction(value)
 
     def payload(self, evidence: Evidence, kind: str) -> tuple[dict | None, str]:
         if not self.value or not self.label:
             return None, ""
         return self._cited(evidence, kind)
+
+
+def _direction(value: str) -> str:
+    """Which way a figure moved, or "": the arrow is drawn from this word, and
+    an improvised one draws nothing rather than the wrong way."""
+    return value if value in ("up", "down", "flat") else ""
 
 
 class Side(Filled):
@@ -420,7 +426,7 @@ class Series(Card):
     @field_validator("direction")
     @classmethod
     def _known_direction(cls, value: str) -> str:
-        return value if value in ("up", "down", "flat") else ""
+        return _direction(value)
 
     def payload(self, evidence: Evidence, kind: str) -> tuple[dict | None, str]:
         # Two points are a comparison, not a series, and a curve through them is
@@ -532,6 +538,12 @@ class Picture(Card):
         return picture, ""
 
 
+def _node_id(value: str) -> str:
+    """A node's id as a slug. A node and the edges that name it go through the
+    same reduction, so "Encoder " in one and "encoder" in the other still meet."""
+    return re.sub(r"[^a-z0-9_-]", "", str(value or "").strip().lower())[:24]
+
+
 class Node(Filled):
     id: str = Field(default="", max_length=24)
     label: str = Field(default="", max_length=48)
@@ -539,7 +551,7 @@ class Node(Filled):
     @field_validator("id")
     @classmethod
     def _slug(cls, value: str) -> str:
-        return re.sub(r"[^a-z0-9_-]", "", str(value or "").strip().lower())[:24]
+        return _node_id(value)
 
 
 class Edge(Filled):
@@ -554,7 +566,7 @@ class Edge(Filled):
     @field_validator("source", "target")
     @classmethod
     def _slug(cls, value: str) -> str:
-        return re.sub(r"[^a-z0-9_-]", "", str(value or "").strip().lower())[:24]
+        return _node_id(value)
 
 
 class Diagram(Card):
@@ -913,13 +925,20 @@ async def _best_picture(ctx: RunContext, why: str = "the widget card was lost") 
     invented caption would be the only unsourced string on the card, on the one
     widget whose entire design is that the model never supplies the picture.
     """
-    for index, result in ctx.sources.all():
-        if not result.image:
-            continue
-        await ctx.stream.emit_block(blocks.block(shapes.IMAGE, picture_payload(index, result)))
-        log.info("%s; showed the retrieved picture from source %s instead", why, index)
-        return True
-    return False
+    shown = await _show_first(ctx, ctx.sources.all())
+    if shown:
+        log.info("%s; showed the retrieved picture from source %s instead", why, shown)
+    return bool(shown)
+
+
+async def _show_first(ctx: RunContext, candidates: list[tuple[int, SearchResult]]) -> int:
+    """Emit the first of these sources that carries a picture, as an image
+    block. Returns its citation number, or 0 when none of them has one."""
+    for index, result in candidates:
+        if result.image:
+            await ctx.stream.emit_block(blocks.block(shapes.IMAGE, picture_payload(index, result)))
+            return index
+    return 0
 
 
 async def show_picture(ctx: RunContext) -> bool:
@@ -934,13 +953,8 @@ async def show_picture(ctx: RunContext) -> bool:
     eligible, never a thumbnail some evidence page happened to carry.
     """
     by_index = dict(ctx.sources.all())
-    for index in ctx.pictures:
-        result = by_index.get(index)
-        if result is None or not result.image:
-            continue
-        await ctx.stream.emit_block(blocks.block(shapes.IMAGE, picture_payload(index, result)))
-        return True
-    return False
+    found = [(index, by_index[index]) for index in ctx.pictures if index in by_index]
+    return bool(await _show_first(ctx, found))
 
 
 def _messages(

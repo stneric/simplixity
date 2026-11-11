@@ -73,17 +73,17 @@ _DEPTH = 60
 # One shared word is how "Eiffel Tower height" finds the page that mentions the
 # height of a feature map.
 LEXICAL_COVERAGE = 0.5
-# A query is about the library at all only if its best passage stands this far
-# above its median one, in cosine similarity (`settings.library_semantic_gap`,
-# 0.12 by default). First measured against two NLP papers: off-topic questions
-# (the Eiffel Tower, a recipe, a share price) had their best passage 0.05-0.07
-# above the median, on-topic ones 0.2-0.45. A gap rather than an absolute
-# similarity, because models differ in their range. A narrow corpus, forty
+# The semantic bar is a setting, `settings.library_semantic_gap` (0.12 by
+# default): a query is about the library at all only if its best passage stands
+# that far above its median one, in cosine similarity. First measured against
+# two NLP papers: off-topic questions (the Eiffel Tower, a recipe, a share
+# price) had their best passage 0.05-0.07 above the median, on-topic ones
+# 0.2-0.45. A gap rather than an absolute similarity, because models differ in
+# their range. A narrow corpus, forty
 # papers on one subject, bunches every similarity together and may need it
 # lower: each search records its gaps (`Library.probes`), a run that finds
 # nothing says how close it came, and `tools/calibrate_library.py` measures a
 # real project.
-SEMANTIC_GAP = 0.12
 _HOW_CLOSE = "Nothing in your papers matched closely enough."
 # Of such a query, passages in the upper half of that gap count as hits.
 SEMANTIC_SHARE = 0.5
@@ -268,7 +268,7 @@ class Library:
         self._said = 0
         # What each semantic search saw: the query, its best and median cosine,
         # and whether the gap between them cleared the bar. The evidence for
-        # tuning `SEMANTIC_GAP` on a real corpus rather than guessing.
+        # tuning `library_semantic_gap` on a real corpus rather than guessing.
         self.probes: list[dict[str, Any]] = []
         self._healed = False
         self._papers: list[dict[str, Any]] | None = None
@@ -302,9 +302,7 @@ class Library:
                 docs.append(
                     _Doc(row["text"], paper, row["file_id"], row["page"], vector, row["id"], dated)
                 )
-            with_text = (
-                await store.project_files(self.conn, self.project_id) if self.project_id else set()
-            )
+            with_text = await self._full_texts()
             for row in await self._relevant():
                 if row["id"] in with_text:
                     continue
@@ -443,6 +441,12 @@ class Library:
             return []
         return await literature.relevant_for_project(self.conn, self.project_id)
 
+    async def _full_texts(self) -> dict[int, str]:
+        """Paper id → the file with its full text (`store.project_full_texts`)."""
+        if not self.project_id:
+            return {}
+        return await store.project_full_texts(self.conn, self.project_id)
+
     async def attached(self) -> list[dict[str, Any]]:
         """The files attached to the chat, as `attachments.as_paper` dicts."""
         if not self.chat_id:
@@ -487,9 +491,7 @@ class Library:
         """The relevant papers, once each, with their abstract and full text."""
         if self._papers is not None:
             return self._papers
-        files = (
-            await store.project_first_pages(self.conn, self.project_id) if self.project_id else {}
-        )
+        files = await self._full_texts()
         seen: set[str] = set()
         papers = []
         for row in await self._relevant():
@@ -616,7 +618,7 @@ class Library:
         six "best" pages, and the writer, handed six pages, answers anyway,
         that is how a source-bound chat ends up stating the height of the
         Eiffel Tower. So a query must single some passages out from the rest
-        (`SEMANTIC_GAP`), and only those it singles out count.
+        (`settings.library_semantic_gap`), and only those it singles out count.
         """
         scored = [
             (_cosine(vector, doc.vector), index)

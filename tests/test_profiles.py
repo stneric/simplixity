@@ -207,6 +207,13 @@ async def test_a_forged_session_is_refused(as_user, browser):
     assert (await forger.get("/api/chats")).status_code == 401
 
 
+async def test_a_session_that_is_not_even_ascii_is_refused_not_a_crash(as_user, db):
+    """A cookie is whatever the client sends, and comparing signatures as text
+    raised on anything outside ASCII: a 500 where a 401 belongs."""
+    await as_user("anna", "geheim")
+    assert await profiles.verify_session(db, "anna.gehäim") is None
+
+
 async def test_changing_the_password_ends_every_other_session(as_user, browser):
     anna = await as_user("anna", "alt")
     other = browser()

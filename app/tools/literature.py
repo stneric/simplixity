@@ -53,6 +53,7 @@ from app.scholar.paper import Paper, identities, merge
 from app.search import quality
 from app.store import literature as store
 from app.store import settings_store
+from app.store.db import now
 
 log = logging.getLogger(__name__)
 
@@ -296,10 +297,6 @@ async def talk(
 # -------------------------------------------------------------------- rounds
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
-
-
 async def run_round(
     conn: aiosqlite.Connection, collection: dict[str, Any], *, user: str
 ) -> dict[str, Any]:
@@ -358,7 +355,7 @@ async def run_round(
     )
     report = {
         "round": number,
-        "at": _now(),
+        "at": now(),
         "queries": queries,
         "rationale": rationale,
         "sources": per_source,
@@ -521,23 +518,28 @@ async def _search_all(
     return found, list(tally.values())
 
 
+def _strategy_report(strategy: str, error: str = "") -> dict[str, Any]:
+    """One strategy's line of a round's report, before it has found anything."""
+    return {
+        "id": strategy,
+        "label": STRATEGY_LABELS[strategy],
+        "found": 0,
+        "errors": [error] if error else [],
+    }
+
+
 async def _strategy(name: str, work) -> tuple[list[Paper], list[dict[str, Any]]]:
     """Run one feedback strategy, turning its failure into a report line."""
     try:
-        papers, report = await work
-        return papers, report
+        return await work
     except sources.SourceError as exc:
-        ids = ["references", "citations"] if name == "graph" else [name]
-        return [], [
-            {"id": i, "label": STRATEGY_LABELS[i], "found": 0, "errors": [str(exc)]} for i in ids
-        ]
+        error = str(exc) or "failed"
     except Exception as exc:  # feedback is an improvement; the search still stands
         log.warning("literature strategy %s failed: %s", name, exc)
-        ids = ["references", "citations"] if name == "graph" else [name]
-        return [], [
-            {"id": i, "label": STRATEGY_LABELS[i], "found": 0, "errors": ["failed unexpectedly"]}
-            for i in ids
-        ]
+        error = "failed unexpectedly"
+    # The graph is one strategy to run and two to report.
+    ids = ["references", "citations"] if name == "graph" else [name]
+    return [], [_strategy_report(i, error) for i in ids]
 
 
 async def _recommended(
@@ -549,12 +551,7 @@ async def _recommended(
         return [i for i in (p.ids.get("s2") or resolved.get(p.key) for p in papers) if i]
 
     positive = ids(relevant)
-    report = {
-        "id": "recommended",
-        "label": STRATEGY_LABELS["recommended"],
-        "found": 0,
-        "errors": [],
-    }
+    report = _strategy_report("recommended")
     if not positive:
         report["errors"].append("None of the relevant papers is in Semantic Scholar")
         return [], [report]
@@ -583,8 +580,7 @@ async def _snowball(
     if dois:
         records += await sources.openalex_by_dois(dois)
     seeds = {r.ids["openalex"] for r in records if r.ids.get("openalex")}
-    back = {"id": "references", "label": STRATEGY_LABELS["references"], "found": 0, "errors": []}
-    forth = {"id": "citations", "label": STRATEGY_LABELS["citations"], "found": 0, "errors": []}
+    back, forth = _strategy_report("references"), _strategy_report("citations")
     if not seeds:
         back["errors"].append("None of the relevant papers is in OpenAlex")
         forth["errors"].append("None of the relevant papers is in OpenAlex")

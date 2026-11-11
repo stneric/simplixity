@@ -18,33 +18,23 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
 
-from app.store.db import DEFAULT_USER
+from app.store.db import DEFAULT_USER, now, owned
 
-DECISIONS = ("", "relevant", "maybe", "excluded")
 RELEVANT = "relevant"
 MAYBE = "maybe"
 EXCLUDED = "excluded"
+# "" is undecided: shown, and not yet screened.
+DECISIONS = ("", RELEVANT, MAYBE, EXCLUDED)
 
 DEFAULT_NAME = "Untitled reading list"
 
 # A conversation that runs long is still one collection's setup, but every turn
 # is sent back to the model with the next one. Older turns fall off the front.
 MAX_TALK_TURNS = 40
-
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
-
-
-def _owned(sql: str, params: list[Any], user: str | None) -> tuple[str, list[Any]]:
-    if user is None:
-        return sql, params
-    return sql + " AND user_id = ?", [*params, user]
 
 
 def _collection(row: aiosqlite.Row) -> dict[str, Any]:
@@ -66,13 +56,13 @@ async def create(
     user: str = DEFAULT_USER,
 ) -> dict[str, Any]:
     collection_id = uuid.uuid4().hex
-    now = _now()
+    created = now()
     await conn.execute(
         """
         INSERT INTO lit_collections (id, user_id, project_id, name, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (collection_id, user, project_id, name.strip() or DEFAULT_NAME, now, now),
+        (collection_id, user, project_id, name.strip() or DEFAULT_NAME, created, created),
     )
     await conn.commit()
     return await get(conn, collection_id, user=user)  # type: ignore[return-value]
@@ -84,7 +74,7 @@ async def get(
     # Never a chat's attachments: they share the table and none of the rest,
     # and every literature route reaches a collection through here.
     async with conn.execute(
-        *_owned(
+        *owned(
             "SELECT * FROM lit_collections WHERE id = ? AND chat_id IS NULL", [collection_id], user
         )
     ) as cursor:
@@ -138,9 +128,9 @@ async def update(
         sets.append(f"{name} = ?")
         params.append(value)
     sets.append("updated_at = ?")
-    params.append(_now())
+    params.append(now())
     cursor = await conn.execute(
-        *_owned(
+        *owned(
             f"UPDATE lit_collections SET {', '.join(sets)} WHERE id = ?",
             [*params, collection_id],
             user,
@@ -154,7 +144,7 @@ async def delete(
     conn: aiosqlite.Connection, collection_id: str, *, user: str | None = None
 ) -> bool:
     cursor = await conn.execute(
-        *_owned("DELETE FROM lit_collections WHERE id = ?", [collection_id], user)
+        *owned("DELETE FROM lit_collections WHERE id = ?", [collection_id], user)
     )
     await conn.commit()
     return cursor.rowcount > 0
@@ -187,7 +177,7 @@ async def add_papers(
     """Insert the papers a round found. Each dict carries `key`, `data`,
     `origin` and `score`. A key already in the collection is skipped, the
     caller has filtered them, and the unique index is the guarantee."""
-    now = _now()
+    added = now()
     cursor = await conn.executemany(
         """
         INSERT OR IGNORE INTO lit_papers
@@ -202,13 +192,13 @@ async def add_papers(
                 round_no,
                 p.get("origin", "search"),
                 float(p.get("score", 0.0)),
-                now,
+                added,
             )
             for p in papers
         ],
     )
     await conn.execute(
-        "UPDATE lit_collections SET updated_at = ? WHERE id = ?", (now, collection_id)
+        "UPDATE lit_collections SET updated_at = ? WHERE id = ?", (added, collection_id)
     )
     await conn.commit()
     return cursor.rowcount
@@ -269,7 +259,7 @@ async def decide(
     sets, params = [], []
     if decision is not None:
         sets += ["decision = ?", "decided_at = ?"]
-        params += [decision, _now() if decision else None]
+        params += [decision, now() if decision else None]
     if note is not None:
         sets.append("note = ?")
         params.append(note)
@@ -280,7 +270,7 @@ async def decide(
         [*params, collection_id, paper_id],
     )
     await conn.execute(
-        "UPDATE lit_collections SET updated_at = ? WHERE id = ?", (_now(), collection_id)
+        "UPDATE lit_collections SET updated_at = ? WHERE id = ?", (now(), collection_id)
     )
     await conn.commit()
     return cursor.rowcount > 0

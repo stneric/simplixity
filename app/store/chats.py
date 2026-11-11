@@ -11,23 +11,18 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
 
 from app.store import attachments
-from app.store.db import DEFAULT_USER
+from app.store.db import DEFAULT_USER, now, owned
 
 log = logging.getLogger(__name__)
 
 TITLE_LIMIT = 70
 # Answers can be long; history is for context, not for replaying the whole thing.
 HISTORY_ANSWER_CHARS = 2000
-
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 def fallback_title(query: str) -> str:
@@ -57,17 +52,17 @@ async def ensure_chat(
     """
     async with conn.execute("SELECT 1 FROM chats WHERE id = ?", (chat_id,)) as cursor:
         if await cursor.fetchone() is not None:
-            await conn.execute("UPDATE chats SET updated_at = ? WHERE id = ?", (_now(), chat_id))
+            await conn.execute("UPDATE chats SET updated_at = ? WHERE id = ?", (now(), chat_id))
             await conn.commit()
             return False
 
-    now = _now()
+    created = now()
     await conn.execute(
         """
         INSERT INTO chats (id, title, created_at, updated_at, project_id, user_id)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (chat_id, fallback_title(query), now, now, project_id, user),
+        (chat_id, fallback_title(query), created, created, project_id, user),
     )
     await conn.commit()
     return True
@@ -131,7 +126,7 @@ async def start_message(
             (chat_id, message_id, run_id, query, blocks, status, depth, model, created_at)
         VALUES (?, ?, ?, ?, '[]', 'running', ?, ?, ?)
         """,
-        (chat_id, message_id, run_id, query, depth, model, _now()),
+        (chat_id, message_id, run_id, query, depth, model, now()),
     )
     await conn.commit()
     return message_id
@@ -145,17 +140,17 @@ async def finish_message(
     answer: str,
     status: str,
 ) -> None:
-    now = _now()
+    finished = now()
     await conn.execute(
         "UPDATE messages SET blocks = ?, answer = ?, status = ?, finished_at = ? WHERE run_id = ?",
-        (json.dumps(blocks, separators=(",", ":")), answer, status, now, run_id),
+        (json.dumps(blocks, separators=(",", ":")), answer, status, finished, run_id),
     )
     await conn.execute(
         """
         UPDATE chats SET updated_at = ?
         WHERE id = (SELECT chat_id FROM messages WHERE run_id = ?)
         """,
-        (now, run_id),
+        (finished, run_id),
     )
     await conn.commit()
 
@@ -186,18 +181,14 @@ async def set_title(conn: aiosqlite.Connection, chat_id: str, title: str) -> str
         return ""
     await conn.execute(
         "UPDATE chats SET title = ?, updated_at = ? WHERE id = ?",
-        (cleaned, _now(), chat_id),
+        (cleaned, now(), chat_id),
     )
     await conn.commit()
     return cleaned
 
 
 async def delete_chat(conn: aiosqlite.Connection, chat_id: str, *, user: str | None = None) -> bool:
-    sql, params = "DELETE FROM chats WHERE id = ?", [chat_id]
-    if user is not None:
-        sql += " AND user_id = ?"
-        params.append(user)
-    async with conn.execute(sql, params) as cursor:
+    async with conn.execute(*owned("DELETE FROM chats WHERE id = ?", [chat_id], user)) as cursor:
         deleted = cursor.rowcount > 0
     if not deleted:
         # Someone else's chat, or none at all: its messages are not ours to touch.
@@ -265,12 +256,13 @@ async def get_chat(
 ) -> dict[str, Any] | None:
     """The chat and its transcript. With `user`, another profile's chat reads as
     missing, which is what makes a 404 the only answer the API can give."""
-    sql = "SELECT id, title, created_at, updated_at, project_id FROM chats WHERE id = ?"
-    params = [chat_id]
-    if user is not None:
-        sql += " AND user_id = ?"
-        params.append(user)
-    async with conn.execute(sql, params) as cursor:
+    async with conn.execute(
+        *owned(
+            "SELECT id, title, created_at, updated_at, project_id FROM chats WHERE id = ?",
+            [chat_id],
+            user,
+        )
+    ) as cursor:
         chat = await cursor.fetchone()
     if chat is None:
         return None

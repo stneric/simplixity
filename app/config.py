@@ -146,7 +146,6 @@ class Settings(BaseSettings):
     # A single-user app behind Cloudflare/Traefik still wants a stop on runaway
     # clients: a stuck reload loop can otherwise burn an API budget overnight.
     rate_limit_runs_per_minute: int = 20
-    trusted_hosts: str = "*"
     # Which peers may set X-Forwarded-For/-Proto, comma-separated addresses or
     # networks. "*" trusts everyone, which is right only while nothing but the
     # proxy can reach the app; with the port published, any client can claim

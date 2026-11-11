@@ -19,7 +19,7 @@ from app.embed.rerank import Passage, rank_passages
 from app.llm import Delta, LLMError
 from app.search import content as content_fetch
 from app.search.base import SearchResult, keep_relevant, order
-from app.search.lenses import LIBRARY
+from app.search.lenses import IMAGES, LIBRARY
 from app.search.searxng import SearchReport, search_all
 
 log = logging.getLogger(__name__)
@@ -383,13 +383,8 @@ async def search_images(
     Split from the registration below so the *call* can run beside the main
     search while the *numbering* still happens after it.
     """
-    from app.search.lenses import LENSES
-
     if ctx.source_bound:
         return [], "Pictures come from the web, which is switched off for this project"
-    lens = LENSES.get("images")
-    if lens is None:
-        return [], "No picture search is configured"
 
     try:
         # The keyword query, not the question. Image archives index captions:
@@ -397,7 +392,7 @@ async def search_images(
         # all for "wie sieht die argentinische flagge aus", which is how a
         # picture search ends up choosing between stock libraries.
         results, report = await search_all(
-            [query or question], limit_per_query=IMAGE_SEARCH_WIDTH, lenses=[lens]
+            [query or question], limit_per_query=IMAGE_SEARCH_WIDTH, lenses=[IMAGES]
         )
     except Exception as exc:  # a missing picture never fails an answer
         log.info("picture search failed: %s", exc)

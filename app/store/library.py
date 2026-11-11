@@ -18,14 +18,11 @@ from __future__ import annotations
 import json
 import uuid
 from array import array
-from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
 
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
+from app.store.db import now
 
 
 def _file(row: aiosqlite.Row) -> dict[str, Any]:
@@ -93,7 +90,7 @@ async def add_file(
             text_pages,
             json.dumps(warnings),
             kind,
-            _now(),
+            now(),
         ),
     )
     await conn.executemany(
@@ -177,7 +174,6 @@ async def assign(
             "WHERE collection_id = ? AND paper_id = ? AND id != ?",
             (collection_id, paper_id, file_id),
         )
-    if paper_id is not None:
         # Each passage is embedded under its paper's title (`passage_text`), so
         # a file filed under another paper needs its vectors made again.
         await conn.execute(
@@ -346,9 +342,18 @@ async def page_text(conn: aiosqlite.Connection, file_id: str, page: int) -> str:
     return row["text"] if row else ""
 
 
-async def project_first_pages(conn: aiosqlite.Connection, project_id: str) -> dict[int, str]:
-    """Paper id → the file holding its searchable full text, for linking a
-    paper's abstract to the first page of its PDF when it has no DOI link."""
+async def project_full_texts(conn: aiosqlite.Connection, project_id: str) -> dict[int, str]:
+    """Paper id → the file holding its searchable full text.
+
+    Read two ways: a paper in here is searched by its pages, so its abstract is
+    not offered beside them, and its citation opens on the first page of that
+    file when it has no DOI link.
+
+    Searchable: a file with at least one passage. A scan without a text layer
+    has none, and counting it made its paper vanish from the library entirely,
+    no pages to find and its abstract held back in favour of them, with
+    nothing anywhere saying so.
+    """
     async with conn.execute(
         """
         SELECT f.paper_id, f.id FROM lit_files f JOIN lit_collections c ON c.id = f.collection_id
@@ -358,23 +363,3 @@ async def project_first_pages(conn: aiosqlite.Connection, project_id: str) -> di
         (project_id,),
     ) as cursor:
         return {row["paper_id"]: row["id"] for row in await cursor.fetchall()}
-
-
-async def project_files(conn: aiosqlite.Connection, project_id: str) -> set[int]:
-    """Paper ids that have a searchable full text, so the abstract of a paper
-    is not offered beside its own pages.
-
-    Searchable: a file with at least one passage. A scan without a text layer
-    has none, and counting it made its paper vanish from the library entirely,
-    no pages to find and its abstract held back in favour of them, with
-    nothing anywhere saying so.
-    """
-    async with conn.execute(
-        """
-        SELECT f.paper_id FROM lit_files f JOIN lit_collections c ON c.id = f.collection_id
-        WHERE c.project_id = ? AND f.paper_id IS NOT NULL
-          AND EXISTS (SELECT 1 FROM lit_chunks k WHERE k.file_id = f.id)
-        """,
-        (project_id,),
-    ) as cursor:
-        return {row["paper_id"] for row in await cursor.fetchall()}

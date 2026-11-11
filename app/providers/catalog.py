@@ -21,6 +21,7 @@ import httpx
 from redis.asyncio import Redis
 
 from app.config import settings
+from app.llm.client import GROQ, LMSTUDIO, OLLAMA, OPENROUTER
 
 log = logging.getLogger(__name__)
 
@@ -33,11 +34,6 @@ EMBEDDING = "embedding"
 # reopen, not an hour. Long enough that opening the picker repeatedly does not
 # re-probe the remote catalogue on every keystroke.
 LOCAL_RETRY_TTL_S = 30
-
-OPENROUTER = "openrouter"
-GROQ = "groq"
-OLLAMA = "ollama"
-LMSTUDIO = "lmstudio"
 
 # Ollama and LM Studio do not always declare what a model is for. Names are the
 # fallback signal, and embedding models are named remarkably consistently.
@@ -281,6 +277,15 @@ async def context_window(provider: str, model: str) -> int:
         log.debug("context window of %s/%s unknown: %s", provider, model, exc)
         return fallback
     return found if isinstance(found, int) and found > 0 else fallback
+
+
+async def window_of(llm: Any) -> int:
+    """The window a client's model is served with: asked of its runtime for a
+    local one, 0 for a remote one, whose window is far larger than anything
+    this app assembles and is therefore never budgeted against."""
+    if not llm.is_local:
+        return 0
+    return await context_window(getattr(llm, "provider", ""), getattr(llm, "model", ""))
 
 
 async def _ollama_window(client: httpx.AsyncClient, model: str) -> int | None:

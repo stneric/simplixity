@@ -8,6 +8,8 @@
 // streamed patch and the source list on every new source, so nothing stateful
 // may hang off a citation's own (disposable) subtree.
 
+import { el } from '../shared/dom.js';
+
 const GAP = 14;
 const EDGE = 8;
 
@@ -154,9 +156,3 @@ function hostOf(source) {
   }
 }
 
-function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text != null) node.textContent = text;
-  return node;
-}

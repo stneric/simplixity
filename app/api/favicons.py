@@ -16,19 +16,15 @@ because the hover card must not wait on any of it.
 from __future__ import annotations
 
 import asyncio
-import base64
-import logging
 
 import httpx
 from fastapi import APIRouter, Path, Response
-from redis.asyncio import Redis
 
 from app import net
+from app.api import proxy
 from app.api.deps import RedisDep
 
 router = APIRouter()
-
-log = logging.getLogger(__name__)
 
 # A hostname, conservatively: at least two labels of letters, digits and
 # hyphens, lowercase. This value goes into an outbound URL, so it is validated
@@ -38,58 +34,21 @@ DOMAIN_PATTERN = r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61
 
 CACHE_PREFIX = "favicon:"
 CACHE_TTL_S = 86400 * 7
-# A miss is cached too, and for almost as long: re-fetching a favicon that did
-# not exist yesterday, on every render, is the whole cost this endpoint avoids.
-MISS_TTL_S = 86400
-MISS = "-"
 
 FETCH_TIMEOUT_S = 4.0
 MAX_BYTES = 100 * 1024
-
-# 1x1 transparent GIF. Served for every failure so the card's layout never
-# shifts and the browser never retries.
-BLANK = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
 
 
 @router.get("/api/favicon/{domain}", include_in_schema=False)
 async def favicon(
     redis: RedisDep, domain: str = Path(pattern=DOMAIN_PATTERN, max_length=253)
 ) -> Response:
-    cached = await _cached(redis, domain)
-    if cached is not None:
-        return _image(cached) if cached else _blank()
-
-    icon = await _fetch(domain)
-    await _store(redis, domain, icon)
+    key = f"{CACHE_PREFIX}{domain}"
+    icon = await proxy.cached(redis, key)
+    if icon is None:
+        icon = await _fetch(domain)
+        await proxy.remember(redis, key, icon, ttl=CACHE_TTL_S)
     return _image(icon) if icon else _blank()
-
-
-async def _cached(redis: Redis, domain: str) -> bytes | None:
-    """`None` = not looked up yet, `b""` = looked up and there is none."""
-    try:
-        raw = await redis.get(f"{CACHE_PREFIX}{domain}")
-    except Exception:
-        return None
-    if raw is None:
-        return None
-    if raw == MISS:
-        return b""
-    try:
-        return base64.b64decode(raw)
-    except Exception:
-        return b""
-
-
-async def _store(redis: Redis, domain: str, icon: bytes) -> None:
-    try:
-        if icon:
-            await redis.set(
-                f"{CACHE_PREFIX}{domain}", base64.b64encode(icon).decode(), ex=CACHE_TTL_S
-            )
-        else:
-            await redis.set(f"{CACHE_PREFIX}{domain}", MISS, ex=MISS_TTL_S)
-    except Exception as exc:
-        log.debug("could not cache the favicon for %s: %s", domain, exc)
 
 
 async def _fetch(domain: str) -> bytes:
@@ -138,7 +97,7 @@ def _image(icon: bytes) -> Response:
 
 def _blank() -> Response:
     return Response(
-        content=BLANK,
+        content=proxy.BLANK,
         media_type="image/gif",
         headers={"Cache-Control": "public, max-age=3600"},
     )

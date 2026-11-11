@@ -4,7 +4,7 @@
 // without the network, so a cache that wins races would buy no capability and
 // cost correctness: assets here are unhashed (`blocks.js` is `blocks.js` in
 // every build), which is the same reason the server sends `no-cache,
-// must-revalidate` from RevalidatingFiles in app/main.py. A cache-first worker
+// must-revalidate` (app/web.py). A cache-first worker
 // would reintroduce exactly the stale-module bug that class exists to prevent.
 //
 // So the cache is a fallback and never a shortcut: online, every response comes

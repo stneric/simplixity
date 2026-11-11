@@ -3,18 +3,14 @@ from __future__ import annotations
 import logging
 import time
 from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from redis.asyncio import Redis
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.responses import Response
 
-from app import net
+from app import __version__, net, web
 from app.agent import runner
 from app.api import (
     chat,
@@ -37,8 +33,6 @@ logging.basicConfig(
 # httpx logs every request at INFO, which drowns out the run's own narration.
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("simplixity")
-
-WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 # Locked down because everything is served from this origin: no CDN, no inline
 # script, no remote font. Vendoring the icons and the markdown renderer is what
@@ -120,7 +114,7 @@ def _report_configuration() -> None:
 
 app = FastAPI(
     title="Simplixity",
-    version="0.3.0",
+    version=__version__,
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url=None,
@@ -219,85 +213,43 @@ async def health() -> JSONResponse:
     )
 
 
-class RevalidatingFiles(StaticFiles):
-    """Static assets that must be re-checked, not merely remembered.
-
-    Nothing here is content-hashed: `blocks.js` is `blocks.js` in every build.
-    Starlette sends an ETag and a Last-Modified but no `Cache-Control`, and a
-    browser with neither falls back to *heuristic* freshness: it reuses a
-    module for a while without asking. The shell then loads the new HTML and
-    yesterday's JavaScript, which is how a deploy turns into a bug report about
-    a feature that is present in the file being served.
-
-    `no-cache` does not mean "do not cache": the copy is kept and revalidated,
-    so an unchanged file still answers 304 and costs no bytes.
-    """
-
-    def file_response(self, *args: Any, **kwargs: Any) -> Response:
-        response = super().file_response(*args, **kwargs)
-        response.headers.setdefault("Cache-Control", "no-cache, must-revalidate")
-        return response
-
-
-# Static frontend, copied not built. Mounted last so /api/* wins.
-if WEB_DIR.is_dir():
-    app.mount("/static", RevalidatingFiles(directory=WEB_DIR), name="static")
+# Static frontend, copied not built. Mounted last so /api/* wins. See app/web.py
+# for why every one of these revalidates.
+if web.WEB_DIR.is_dir():
+    app.mount("/static", web.RevalidatingFiles(directory=web.WEB_DIR), name="static")
 
     @app.get("/", include_in_schema=False)
     async def index() -> FileResponse:
-        # Assets are unhashed, so the shell must revalidate on every load or a
-        # redeploy leaves a stale app talking to a new API.
-        return FileResponse(
-            WEB_DIR / "index.html", headers={"Cache-Control": "no-cache, must-revalidate"}
-        )
+        return web.page("index.html")
 
     @app.get("/literature", include_in_schema=False)
     async def literature_page() -> FileResponse:
         # A page of its own rather than a dialog over the chat: screening a
         # reading list is an afternoon's work with its own sidebar, and it
-        # deserves an address that can be bookmarked. Same shell rules as "/".
-        return FileResponse(
-            WEB_DIR / "literature.html", headers={"Cache-Control": "no-cache, must-revalidate"}
-        )
+        # deserves an address that can be bookmarked.
+        return web.page("literature.html")
 
     @app.get("/favicon.svg", include_in_schema=False)
     async def favicon() -> FileResponse:
-        # Same reasoning as RevalidatingFiles, which this route bypasses by not
-        # going through the mount: Starlette sends an ETag and nothing else, and
-        # a browser without Cache-Control falls back to heuristic freshness. It
-        # does that to favicons harder than to anything else, so a redesigned
-        # icon otherwise stays the old one for days.
-        return FileResponse(
-            WEB_DIR / "assets" / "favicon.svg",
-            headers={"Cache-Control": "no-cache, must-revalidate"},
-        )
+        # Browsers apply heuristic freshness to favicons harder than to anything
+        # else, so without the header a redesigned icon stays the old one for days.
+        return web.page("assets/favicon.svg")
 
     @app.get("/sw.js", include_in_schema=False)
     async def service_worker() -> FileResponse:
         # Served from the root because a worker only controls its own directory
         # and below. At /static/sw.js it could never see a navigation to "/",
-        # which is the only reason it exists. `no-cache` keeps a worker update
+        # which is the only reason it exists. Revalidating keeps a worker update
         # from waiting out a stale copy of itself.
-        return FileResponse(
-            WEB_DIR / "sw.js",
-            media_type="text/javascript",
-            headers={"Cache-Control": "no-cache, must-revalidate"},
-        )
+        return web.page("sw.js", media_type="text/javascript")
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
     async def manifest() -> FileResponse:
-        return FileResponse(
-            WEB_DIR / "manifest.webmanifest",
-            media_type="application/manifest+json",
-            headers={"Cache-Control": "no-cache, must-revalidate"},
-        )
+        return web.page("manifest.webmanifest", media_type="application/manifest+json")
 
     @app.get("/apple-touch-icon.png", include_in_schema=False)
     async def apple_touch_icon() -> FileResponse:
         # iOS looks here by convention before it reads any markup, and asks for
         # a handful of near-miss names besides. One canonical route answers the
         # only one that matters.
-        return FileResponse(
-            WEB_DIR / "assets" / "icons" / "apple-touch-icon.png",
-            headers={"Cache-Control": "no-cache, must-revalidate"},
-        )
+        return web.page("assets/icons/apple-touch-icon.png")

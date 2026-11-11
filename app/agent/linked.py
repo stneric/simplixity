@@ -29,7 +29,7 @@ import dataclasses
 import logging
 
 from app.agent import route as route_module
-from app.agent.context import RunContext, Steps
+from app.agent.context import RunContext, Steps, ellipsis
 from app.agent.depth import Depth
 from app.agent.route import Route
 from app.embed.rerank import Passage, passages_from
@@ -129,12 +129,7 @@ def route(current: Route, requested: Depth, *, read: bool) -> Route:
 def _said(registered: list, failed: list[str]) -> str:
     if not registered:
         return "Could not read the linked page" if len(failed) == 1 else "Could not read the links"
-    titles = " · ".join(_short(result.title) for _index, result in registered)
+    titles = " · ".join(ellipsis(result.title, 60) for _index, result in registered)
     if failed:
         return f"Read {titles}; {len(failed)} could not be opened"
     return f"Read {titles}"
-
-
-def _short(text: str, limit: int = 60) -> str:
-    text = " ".join(text.split())
-    return text if len(text) <= limit else f"{text[: limit - 1]}…"

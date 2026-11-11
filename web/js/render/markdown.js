@@ -487,8 +487,9 @@ function citation(number, sources, quotes = [], direct = false) {
 // reference and the anchored words in its hover card. The writer numbers
 // pages, one source per PDF page, so its numbers were nonsense to a reader:
 // two pages of one paper were "4" and "7", and the same page twice was "1 1".
-// The paper's number comes from `paperNumbers`, which the source list uses too. Written out in the prose ("vgl. Vaswani et al. 2017, S. 5"
-// in a box after every sentence) it was the loudest thing on the page. The
+// The paper's number comes from `paperNumbers`, which the source list uses
+// too. Written out in the prose ("vgl. Vaswani et al. 2017, S. 5" in a box
+// after every sentence) it was the loudest thing on the page. The
 // words a citation is anchored at still travel with the link, highlighted when
 // the page opens and checked word for word, but they are not a quotation and
 // never stand in the text. Copy still writes the full reference
@@ -543,7 +544,9 @@ export function paperNumbers(sources = []) {
   return numbers;
 }
 
-/** The page of a library source, as its unit and number, or "". */
+/** The page of a library source, as its unit and number ("S. 5"), or "". The
+ *  page from the link, which is the page the reader opens, and "part" for a
+ *  file that has parts rather than pages. */
 function pageOf(source) {
   const page = /^\/library\/[^/]+\/(\d+)/.exec(source.url ?? '')?.[1];
   if (!page) return '';
@@ -559,13 +562,10 @@ export function citeLabel(source, sources) {
 }
 
 /** "Vaswani et al. 2017, S. 5", with "vgl." in front unless the citation is a
- *  direct quotation. The page from the link, which is the page the reader
- *  opens, and "part" for a file that has parts rather than pages. */
+ *  direct quotation. */
 export function referenceLabel(source, direct = false) {
-  const page = /^\/library\/[^/]+\/(\d+)/.exec(source.url ?? '')?.[1];
-  const parts = / \(part \d+\)$/.test(source.title ?? '');
-  const unit = parts ? (GERMAN ? 'Teil' : 'part') : GERMAN ? 'S.' : 'p.';
-  const where = page ? `${source.byline}, ${unit} ${page}` : source.byline;
+  const page = pageOf(source);
+  const where = page ? `${source.byline}, ${page}` : source.byline;
   return direct ? where : `${GERMAN ? 'vgl.' : 'cf.'} ${where}`;
 }
 

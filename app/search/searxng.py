@@ -481,18 +481,10 @@ def _all_unresponsive(payloads: list[dict]) -> dict[str, str]:
 
 
 def _engines_of(lenses: list[Lens]) -> list[str]:
-    names: list[str] = []
-    for lens in lenses:
-        for engine in lens.engines:
-            if engine not in names:
-                names.append(engine)
-    return names
+    """Every engine the lenses name, once each, in the order first named."""
+    return list(dict.fromkeys(engine for lens in lenses for engine in lens.engines))
 
 
 def _categories_of(lenses: list[Lens]) -> list[str]:
-    names: list[str] = []
-    for lens in lenses:
-        for category in lens.categories:
-            if category not in names:
-                names.append(category)
+    names = list(dict.fromkeys(category for lens in lenses for category in lens.categories))
     return names or ["general"]

@@ -33,7 +33,7 @@ from app.agent import blocks, deep, linked, prompts, research, shapes, verify, w
 from app.agent import depth as depth_module
 from app.agent import route as route_module
 from app.agent.budget import Budget, Cancelled
-from app.agent.context import RunContext, SourceRegistry, Steps
+from app.agent.context import RunContext, SourceRegistry, Steps, ellipsis
 from app.agent.route import Route
 from app.config import settings
 from app.embed.rerank import passages_from
@@ -129,7 +129,7 @@ class RunRequest:
     # Optional small model for triage. Empty means the chat model does it.
     router_model: str | None = None
     router_provider: str = "openrouter"
-    # Optional model for the citation check. Empty keeps `verify._judge`'s rule.
+    # Optional model for the citation check. Empty keeps `RunContext.checker`'s rule.
     judge_model: str | None = None
     judge_provider: str = "openrouter"
     # Where "what is the weather" means, when the question does not say.
@@ -262,7 +262,7 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
     pinned = await linked.read(ctx, urls, steps)
     classification = await _classify(ctx, steps, pinned)
     question = classification.standalone_question.strip() or ctx.query
-    route = route_module.plan(classification, ctx.requested_depth or ctx.depth)
+    route = route_module.plan(classification, ctx.asked_depth)
 
     # A widget is made of retrieved material (a picture the search returned, a
     # price a source stated), so choosing one is itself a statement that the
@@ -272,7 +272,7 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
     if route.shape in shapes.WIDGET_SHAPES:
         classification.needs_search = True
         if route.mode == route_module.DIRECT:
-            route = route_module.widened(route, ctx.requested_depth or ctx.depth)
+            route = route_module.widened(route, ctx.asked_depth)
 
     if ctx.library is not None:
         route = _bound_to_library(ctx, route)
@@ -282,7 +282,7 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
     # turns the same question into a search, the only way left to answer it.
     search = True
     if urls and route.mode == route_module.DIRECT:
-        route = linked.route(route, ctx.requested_depth or ctx.depth, read=bool(pinned))
+        route = linked.route(route, ctx.asked_depth, read=bool(pinned))
         search = not pinned
     if pinned and not classification.wants_image:
         # "Was ist <link>" reads as a profile, and a profile asks for a picture.
@@ -304,7 +304,7 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
         # No service answered. The cheap preset was justified by the lookup
         # succeeding, so the fallback goes back to the full reading budget
         # rather than searching a forecast on one page of snippets.
-        route = route_module.widened(route, ctx.requested_depth or ctx.depth)
+        route = route_module.widened(route, ctx.asked_depth)
 
     _apply(ctx, route)
 
@@ -331,9 +331,9 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
     unanswered: list[str] = []
     passages: list = []
     if not search:
-        await steps.retitle(f"Reading “{_ellipsis(pinned.pages[0][1])}”")
+        await steps.retitle(f"Reading “{ellipsis(pinned.pages[0][1])}”")
     else:
-        await steps.retitle(f"Researching “{_ellipsis(question)}”")
+        await steps.retitle(f"Researching “{ellipsis(question)}”")
         _widen_for(ctx, route.shape)
         if ctx.library is not None:
             # A short attachment is read whole whatever was asked: the search
@@ -394,7 +394,7 @@ async def _execute(ctx: RunContext, steps: Steps) -> None:
             )
         )
 
-    window = await local_window(ctx.llm)
+    window = await catalog.window_of(ctx.llm)
     passages, dropped, answer_tokens, compact = _fit_to_window(ctx, passages, build, window=window)
     if dropped:
         # Named, because the alternative is an answer that is quietly thinner
@@ -478,14 +478,6 @@ COMPACT_BELOW_TOKENS = 16_000
 WINDOW_SAFETY_TOKENS = 256
 
 
-async def local_window(llm: Any) -> int:
-    """The window a local model is served with, asked of its runtime; 0 for a
-    remote one, whose window is far larger than anything this app assembles."""
-    if not llm.is_local:
-        return 0
-    return await catalog.context_window(getattr(llm, "provider", ""), getattr(llm, "model", ""))
-
-
 def _fit_to_window(
     ctx: RunContext, passages: list, build: Any, window: int | None = None
 ) -> tuple[list, int, int, bool]:
@@ -497,7 +489,7 @@ def _fit_to_window(
     Only local runtimes are budgeted: a remote model's window is far larger than
     anything this app assembles, and guessing at it would trim good evidence for
     no reason. A local one is served with whatever window its runtime gives
-    that model (`local_window`, by default Ollama's 4096), and truncates
+    that model (`catalog.window_of`, by default Ollama's 4096), and truncates
     silently past it, so the choice is not "trim or don't" but "trim here, by
     rank, with the numbering intact, or let the runtime cut the middle out of
     the prompt". Without `window`, `local_context_tokens` stands in for it.
@@ -678,7 +670,7 @@ def _bound_to_library(ctx: RunContext, route: Route) -> Route:
     looks like it came from them while it did not. Lookups and pictures come
     from the web, so they go when the web is off.
     """
-    requested = ctx.requested_depth or ctx.depth
+    requested = ctx.asked_depth
     # Passage citations carry the cited words inside the answer, so the same
     # answer costs half as many tokens again. At the ordinary budget a long
     # answer stopped mid-sentence, continuation and all.
@@ -801,7 +793,7 @@ async def _second_look(ctx: RunContext, question: str, passages: list, steps: St
             step.text = "Checked for gaps: the sources cover the question"
             return passages
         missing = follow_ups[0].question or follow_ups[0].query
-        step.text = f"Missing: {_ellipsis(missing, 60)}. Searching again"
+        step.text = f"Missing: {ellipsis(missing, 60)}. Searching again"
 
     await ctx.guard()
     if not ctx.budget.can_research():
@@ -1026,8 +1018,3 @@ def _image_query(route: Route, queries: list[str]) -> str:
     """What the picture search asks for: the classifier's caption-style query,
     else the first web query, else (in `search_images`) the question itself."""
     return route.image_query or (queries[0] if queries else "")
-
-
-def _ellipsis(text: str, limit: int = 80) -> str:
-    text = " ".join(text.split())
-    return text if len(text) <= limit else f"{text[: limit - 1]}…"

@@ -404,7 +404,9 @@ test('a passage holding quotation marks and a citation of its own still cites', 
 
 const PAGE = { index: 4, title: 'Attention (PDF p. 5)', url: '/library/f1/5', byline: 'Vaswani et al. 2017' };
 
-const P = /^de\b/i.test(globalThis.navigator?.language ?? '') ? 'S.' : 'p.';
+// The page's unit follows the answer's language, never the browser's, and these
+// answers are too short to tell: under eight words reads as English (`isGerman`).
+const P = 'p.';
 
 test('a citation of a library page is its paper and page in the grey pill', () => {
   // Anchored at the words that carry the statement, but not a quotation: the

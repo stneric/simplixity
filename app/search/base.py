@@ -156,6 +156,25 @@ class SearchResult:
         }
 
 
+# A citation in an earlier answer: `[3]`, or a passage citation `[3: "…"]`.
+_OLD_CITATION = re.compile(
+    r'\s?\[\d{1,3}(?:(?:\s*[Qq]uote)?:\s*(?:["“„«»][^"“”„«»\n]*["”“»«]\s*[,;]?\s*)+)?\]'
+)
+
+
+def uncited(text: str) -> str:
+    """An earlier answer with its citation numbers taken out.
+
+    Those numbers belong to the run that wrote them. Each run numbers its own
+    sources from one, so the `[4]` of the last answer is a different page in
+    this one, and a model that sees "[4: "…"]" beside a claim repeats the
+    pair, now pointing at a source that never said it. Without the numbers an
+    earlier answer is what it should be wherever it is reused: context in the
+    conversation's history, and plain text when a project offers it as a source.
+    """
+    return _OLD_CITATION.sub("", text)
+
+
 # ------------------------------------------------------------------- normalising
 
 # Trailing site brand: `… | Shaping Europe's digital future - European Union`.

@@ -35,6 +35,14 @@ async def test_a_project_counts_the_chats_filed_under_it(db):
     assert [c["id"] for c in await chats.list_chats(db, project_id=project["id"])] == ["c2", "c1"]
 
 
+async def test_a_project_is_returned_under_the_name_it_was_stored_with(db):
+    """A name of only spaces is stored as untitled, and used to come back empty
+    from the call that made it, so the sidebar showed a blank row until reload."""
+    project = await projects.create(db, "   ")
+    assert project["name"] == projects.UNTITLED
+    assert [p["name"] for p in await projects.list_projects(db)] == [projects.UNTITLED]
+
+
 async def test_deleting_a_project_keeps_its_chats(db):
     """A project is a view onto chats, not their owner. Deleting one because the
     grouping stopped being useful must not be a way to lose a month of work."""
@@ -111,6 +119,23 @@ async def test_a_past_answer_comes_back_as_a_source_the_reader_can_open(db):
     # The answer arrives as content, not as a snippet to be fetched later.
     assert "Fluent Bit" in result.content
     assert result.tier_label == "This project"
+
+
+async def test_a_past_answer_is_offered_without_its_own_citation_numbers(db):
+    """Its `[2]` was that run's second source, and here it would read as this
+    run's. Every form a citation takes goes, the direct quotation included."""
+    project = await projects.create(db, "Logs")
+    await chats.ensure_chat(db, "c1", "kafka log parsing", project["id"])
+    await _turn(
+        db,
+        "c1",
+        "kafka log parsing",
+        'Fluent Bit parses the Kafka log lines [2]. They [1 quote: "arrive as JSON"] '
+        'and are indexed [3: "indexed by day"].',
+    )
+
+    [result] = await project_search(db, project["id"], "how is kafka log parsing done")
+    assert result.content == ("Fluent Bit parses the Kafka log lines. They and are indexed.")
 
 
 async def test_a_past_answer_about_something_else_is_left_out(db):

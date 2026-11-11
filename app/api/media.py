@@ -19,15 +19,14 @@ widget that has already been laid out must not reflow because a host was slow.
 
 from __future__ import annotations
 
-import base64
 import logging
 from urllib.parse import unquote, urlsplit
 
 import httpx
 from fastapi import APIRouter, Path, Query, Response
-from redis.asyncio import Redis
 
 from app import net
+from app.api import proxy
 from app.api.deps import RedisDep
 
 router = APIRouter()
@@ -43,14 +42,10 @@ FLAG_URL = "https://flagcdn.com/w80/{code}.png"
 
 FLAG_CACHE_PREFIX = "flag:"
 FLAG_TTL_S = 86400 * 30
-MISS = "-"
-MISS_TTL_S = 86400
 
 FETCH_TIMEOUT_S = 6.0
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
 MAX_FLAG_BYTES = 64 * 1024
-
-BLANK = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
 
 # What a browser will render as a picture.
 _ALLOWED_TYPES = frozenset(
@@ -89,12 +84,11 @@ async def flag(redis: RedisDep, code: str = Path(pattern=FLAG_PATTERN)) -> Respo
     has any influence over, and a code either names a country or names nothing.
     There is no argument here that could point at an arbitrary host.
     """
-    cached = await _cached(redis, code)
-    if cached is not None:
-        return _image(cached, "image/png") if cached else _blank()
-
-    icon = await _get(FLAG_URL.format(code=code), MAX_FLAG_BYTES)
-    await _store(redis, code, icon)
+    key = f"{FLAG_CACHE_PREFIX}{code}"
+    icon = await proxy.cached(redis, key)
+    if icon is None:
+        icon, _content_type = await _get(FLAG_URL.format(code=code), MAX_FLAG_BYTES)
+        await proxy.remember(redis, key, icon, ttl=FLAG_TTL_S)
     return _image(icon, "image/png") if icon else _blank()
 
 
@@ -114,7 +108,7 @@ async def image(url: str = Query(max_length=2000)) -> Response:
     for candidate in (_commons_thumbnail(target), target):
         if not candidate:
             continue
-        body, content_type = await _get_typed(candidate, MAX_IMAGE_BYTES)
+        body, content_type = await _get(candidate, MAX_IMAGE_BYTES)
         if body:
             return _image(body, content_type)
     return _blank()
@@ -179,7 +173,9 @@ def _fetchable(url: str) -> bool:
     return not (host[0].isdigit() or ":" in host)
 
 
-async def _get_typed(url: str, limit: int) -> tuple[bytes, str]:
+async def _get(url: str, limit: int) -> tuple[bytes, str]:
+    """The image at `url` and its type, or `(b"", "")` when it is not one that
+    may be shown: unreachable, not an image, empty or over `limit`."""
     try:
         response = await net.client().get(url, timeout=FETCH_TIMEOUT_S)
         response.raise_for_status()
@@ -196,39 +192,6 @@ async def _get_typed(url: str, limit: int) -> tuple[bytes, str]:
     return body, content_type
 
 
-async def _get(url: str, limit: int) -> bytes:
-    body, _content_type = await _get_typed(url, limit)
-    return body
-
-
-async def _cached(redis: Redis, code: str) -> bytes | None:
-    """`None` = not looked up yet, `b""` = looked up and there is none."""
-    try:
-        raw = await redis.get(f"{FLAG_CACHE_PREFIX}{code}")
-    except Exception:
-        return None
-    if raw is None:
-        return None
-    if raw == MISS:
-        return b""
-    try:
-        return base64.b64decode(raw)
-    except Exception:
-        return b""
-
-
-async def _store(redis: Redis, code: str, icon: bytes) -> None:
-    try:
-        if icon:
-            await redis.set(
-                f"{FLAG_CACHE_PREFIX}{code}", base64.b64encode(icon).decode(), ex=FLAG_TTL_S
-            )
-        else:
-            await redis.set(f"{FLAG_CACHE_PREFIX}{code}", MISS, ex=MISS_TTL_S)
-    except Exception as exc:
-        log.debug("could not cache the flag for %s: %s", code, exc)
-
-
 def _image(body: bytes, content_type: str) -> Response:
     return Response(
         content=body,
@@ -243,7 +206,7 @@ def _blank() -> Response:
     browser holding the blank pixel for an image URL keeps showing nothing
     for it long after the server would answer with the picture."""
     return Response(
-        content=BLANK,
+        content=proxy.BLANK,
         media_type="image/gif",
         headers={"Cache-Control": "no-store"},
     )

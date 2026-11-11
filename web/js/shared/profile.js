@@ -15,6 +15,7 @@
 // reload is guaranteed to get right is starting over.
 
 import { iconNode } from './icons.js';
+import { el } from './dom.js';
 
 /** The name as the server will accept it: lowercase, `a-z0-9_-`, 32 at most.
  *  Umlauts and spaces are folded rather than rejected, so "Jürgen M" becomes
@@ -27,13 +28,6 @@ export function slug(name) {
     .replace(/[^a-z0-9_-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 32);
-}
-
-function el(tag, className = '', text = '') {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text) node.textContent = text;
-  return node;
 }
 
 function field(labelText, type, { placeholder = '', autocomplete = 'off' } = {}) {

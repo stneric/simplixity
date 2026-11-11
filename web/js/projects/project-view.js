@@ -21,13 +21,7 @@
 import { iconNode } from '../shared/icons.js';
 import { ModelPicker } from '../shared/picker.js';
 import { isLibrary } from '../chat/source-switch.js';
-
-const el = (tag, className, text) => {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text != null) node.textContent = text;
-  return node;
-};
+import { el } from '../shared/dom.js';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 

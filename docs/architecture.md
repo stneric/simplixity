@@ -18,6 +18,7 @@ browser ──HTTP/SSE──▶ app (FastAPI) ──┬── Redis     live run
 app/
   main.py          FastAPI app, middleware, lifespan (orphan reaping at boot)
   runs.py          the seam between HTTP, Redis and the agent
+  web.py           the frontend's files and how they are served (always revalidated)
   config.py        settings from environment variables
   api/             HTTP routes: chat, chats, events (SSE), models, profiles, …
   agent/
@@ -279,7 +280,7 @@ See [literature.md](literature.md) for the user-facing workflow. In short: a
 project that contains a reading list is a *literature project*, and a chat
 with attached files behaves the same way. Their runs search a
 `search.library.Library` (the uploaded PDFs, cut into page-bound passages and
-embedded) instead of, or alongside, the web. `runs._start` decides this from
+embedded) instead of, or alongside, the web. `runs.start` decides this from
 where the chat is filed, never from the request.
 
 Such a run never answers from the model alone, does no lookups or picture
@@ -290,7 +291,7 @@ verifier then checks every sentence, not only cited ones
 with its page (`verify.check_passages`). The writer's own reasoning goes in
 blockquotes and is listed as such rather than as missing a source.
 
-The library search has floors (`LEXICAL_COVERAGE`, `SEMANTIC_GAP`) so it can
+The library search has floors (`LEXICAL_COVERAGE`, `LIBRARY_SEMANTIC_GAP`) so it can
 find nothing, and a question the papers do not cover gets no answer rather
 than one from the model's own knowledge. `tools/calibrate_library.py` measures
 the semantic floor for an install.
@@ -304,13 +305,14 @@ missing vectors before searching and the rest in a background task
 
 No framework, no build step, no CDN. The ES modules under `web/` are served as
 they are, and the Content Security Policy allows only `'self'`. File names are
-not hashed, so the server sends `no-cache, must-revalidate` and the service
-worker fetches network-first.
+not hashed, so the server sends `no-cache, must-revalidate` (`app/web.py`) and
+the service worker fetches network-first.
 
 The markdown renderer (`web/js/render/markdown.js`) never assigns `innerHTML`. It builds
 DOM nodes with `createElement` and `textContent`, so model output cannot become
 markup and there is nothing to sanitise. The TeX and diagram renderers follow
-the same rule. Every outbound link and citation goes through `web/js/render/links.js`,
+the same rule, and every other module builds its nodes with `el()` from
+`web/js/shared/dom.js`. Every outbound link and citation goes through `web/js/render/links.js`,
 which checks the URL scheme and opens the link in a new tab with `noopener`.
 
 Under each answer sits the *tray*: one row of icons for what is about the

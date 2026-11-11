@@ -31,6 +31,13 @@ log = logging.getLogger(__name__)
 Message = dict[str, Any]
 
 
+def ellipsis(text: str, limit: int = 80) -> str:
+    """One line of at most `limit` characters, for a step's label: a question
+    or a page title is quoted there, and neither has a length of its own."""
+    text = " ".join(text.split())
+    return text if len(text) <= limit else f"{text[: limit - 1]}…"
+
+
 # How many sources one domain may contribute, as a share of the whole list.
 #
 # `search.base.order` already caps this, but per search, and a run makes
@@ -255,7 +262,7 @@ class RunContext:
     # single-model install wants.
     router: LLM | None = None
     # The model that checks the citations, when one is set apart for it. None
-    # leaves the choice to `verify._judge`.
+    # leaves the choice to `checker`.
     judge: LLM | None = None
     # A literature project's papers, one line each (`Library.catalog`), for the
     # calls that write queries. Empty everywhere else.
@@ -334,12 +341,26 @@ class RunContext:
         return sources
 
     @property
+    def asked_depth(self) -> Depth:
+        """The depth the reader asked for, which may be AUTO: the ceiling a
+        route is planned and widened against."""
+        return self.requested_depth or self.depth
+
+    @property
     def source_bound(self) -> bool:
         """Whether this run may only answer from the person's own papers."""
         return self.library is not None and not self.web
 
     def checker(self) -> LLM:
-        """The model that rules on the citations, see `verify._judge`."""
+        """The model that rules on the citations.
+
+        A judge model of its own wherever one is set (`judge_model`), and it
+        should be of another family than the writer: a model checking its own
+        answer shares the blind spots that wrote it. Without one, the triage
+        model where one is set, it is a reading task, except in a literature
+        project: there the verdicts are what a thesis rests on, and a fast
+        model waved through definitions its source never gave, so the writer's
+        model judges those."""
         if self.judge is not None:
             return self.judge
         if self.library is not None:
@@ -352,7 +373,7 @@ class RunContext:
 
     def provenance(self) -> dict[str, Any]:
         """Everything the footer needs to explain the run to a sceptical reader."""
-        requested = self.requested_depth or self.depth
+        requested = self.asked_depth
         return {
             "depth": self.depth.id,
             "depth_label": self.depth.label,

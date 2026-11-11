@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.api import media
+from app.api import media, proxy
 
 PORTRAIT = (
     "https://upload.wikimedia.org/wikipedia/commons/5/56/Donald_Trump_official_portrait.jpg"
@@ -56,7 +56,7 @@ async def test_the_thumbnail_is_tried_first_and_the_original_is_the_fallback(mon
             return b"", ""
         return b"jpeg", "image/jpeg"
 
-    monkeypatch.setattr(media, "_get_typed", get_typed)
+    monkeypatch.setattr(media, "_get", get_typed)
     response = await media.image(PORTRAIT)
 
     assert asked == [PORTRAIT_THUMB, PORTRAIT]
@@ -70,7 +70,7 @@ async def test_a_thumbnail_that_answers_is_the_only_fetch(monkeypatch):
         asked.append(url)
         return b"jpeg", "image/jpeg"
 
-    monkeypatch.setattr(media, "_get_typed", get_typed)
+    monkeypatch.setattr(media, "_get", get_typed)
     await media.image(PORTRAIT)
 
     assert asked == [PORTRAIT_THUMB]
@@ -83,8 +83,8 @@ async def test_a_picture_that_could_not_be_fetched_is_not_cached(monkeypatch):
     async def get_typed(url, limit):
         return b"", ""
 
-    monkeypatch.setattr(media, "_get_typed", get_typed)
+    monkeypatch.setattr(media, "_get", get_typed)
     response = await media.image(PORTRAIT)
 
-    assert response.body == media.BLANK
+    assert response.body == proxy.BLANK
     assert response.headers["cache-control"] == "no-store"
