@@ -414,6 +414,23 @@ test('the view leaves a fold the reader changed alone', () => {
   assert.equal(detailsOf(container).open, true);
 });
 
+test('streamed thoughts keep their box, so it can be opened while the model thinks', () => {
+  const container = document.createElement('div');
+  const view = new BlockView(container);
+  const thoughts = (content) => [{ id: 't1', type: 'thinking', data: { status: 'active', content } }];
+
+  view.render(thoughts('First'));
+  const details = detailsOf(container);
+  details.open = true; // the reader opened it
+
+  view.render(thoughts('First, then more'));
+  // The same element, not a copy: a replaced <summary> under the pointer is a
+  // click that never lands.
+  assert.equal(detailsOf(container), details);
+  assert.equal(details.open, true);
+  assert.match(textOf(details, 'thinking-body'), /then more/);
+});
+
 test('settling folds everything that is still open', () => {
   const container = document.createElement('div');
   const view = new BlockView(container);

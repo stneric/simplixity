@@ -1389,6 +1389,21 @@ export class BlockView {
         return previous;
       }
 
+      // Streamed thoughts: the same <details> stays on the page and only its
+      // body is brought up to date. Swapping in a fresh one on every token
+      // swallowed clicks on "Thoughts" (mousedown on one summary, mouseup on
+      // its replacement is no click), and an opened box jumped back to its top
+      // and dropped a selection eight times a second. A reader at the bottom of
+      // the box keeps following the newest thought; one who scrolled up stays.
+      const prevThought = before?.querySelector(':scope > .thinking-body');
+      const nextThought = after?.querySelector(':scope > .thinking-body');
+      if (prevThought && nextThought) {
+        const following = prevThought.scrollHeight - prevThought.scrollTop - prevThought.clientHeight < 24;
+        morph(prevThought, nextThought);
+        if (following) prevThought.scrollTop = prevThought.scrollHeight;
+        return previous;
+      }
+
       previous.replaceChildren(...node.childNodes);
       return previous;
     }
