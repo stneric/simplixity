@@ -6,6 +6,13 @@ include breaking changes, which are called out.
 
 ## Unreleased
 
+## 0.3.0 (2026-11-11)
+- Thoughts can be opened while the model is still thinking. The box used to
+  be rebuilt on every streamed token, which swallowed the click and made an
+  opened box jump back to its top. A reader at the bottom of the box now
+  follows the newest thought.
+- Setup instructions for the Simplixity model family on the server version.
+
 ## 0.2.2 (2026-11-11)
 Small fix for running local models. Adjusted for usage with the simplixity model family. Not yet available on hf but in testing.
 
