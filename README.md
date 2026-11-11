@@ -139,7 +139,71 @@ Ollama and LM Studio running on the host are discovered automatically. Without
 an OpenRouter key the app still runs on them; embeddings then fall back to
 keyword ranking. Note that the redaction tool requires a local model.
 
-A model that is specialized for title generation is currently in work. Progress can be found at https://huggingface.co/stneric/simplixity-title-0.8b
+#### Simplixity's own models
+
+Three small models are fine-tuned for the steps of a run, in English and
+German. Together with an embedding model they fit in 8 GB of VRAM.
+
+Simplixity Desktop handles all of this by itself so if you're only interested in running this for yourserlf without a server, check out stneric/simplixity-desktop.
+
+| Setting | Model | Size (Q4_K_M) | Files |
+|---|---|---|---|
+| Chat model | `simplixity-writer:4b-v1-q4_k_m`, writes the cited answer | 2.8 GB | [GGUF](https://huggingface.co/stneric/simplixity-writer-4b-GGUF) · [safetensors](https://huggingface.co/stneric/simplixity-writer-4b) |
+| Router model | `simplixity-router:2b-v1-q4_k_m`, decides whether and how to search | 1.3 GB | [GGUF](https://huggingface.co/stneric/simplixity-router-2b-GGUF) · [safetensors](https://huggingface.co/stneric/simplixity-router-2b) |
+| Title model | `simplixity-title:0.8b-v4-q4_k_m`, names the chats | 0.5 GB | [GGUF](https://huggingface.co/stneric/simplixity-title-0.8b-GGUF) · [safetensors](https://huggingface.co/stneric/simplixity-title-0.8b) |
+| Embedding model | `embeddinggemma` | 0.6 GB | `ollama pull embeddinggemma` |
+
+Results and limits of each model are on its model page. To set them up with
+Ollama:
+
+1. Download the GGUF files: `simplixity-writer-4b-v1-Q4_K_M.gguf`,
+   `simplixity-router-2b-v1-Q4_K_M.gguf` and
+   `simplixity-title-0.8b-v4-Q4_K_M.gguf`.
+2. Write a Modelfile for each, with the **full** path after `FROM` (a relative
+   path does not work). The writer's:
+
+   ```
+   FROM /full/path/to/simplixity-writer-4b-v1-Q4_K_M.gguf
+   RENDERER qwen3.5
+   PARSER qwen3.5
+   PARAMETER num_ctx 8192
+   PARAMETER draft_num_predict 2
+   ```
+
+   The router's is the same with `num_ctx 8192` and without
+   `draft_num_predict`. The title model needs only `FROM`, `RENDERER` and
+   `PARSER`. Without `RENDERER` and `PARSER` the system prompt never reaches
+   the model. The writer was trained for an 8k window, and Simplixity reads
+   `num_ctx` to fit the sources to it. `draft_num_predict 2` turns on
+   speculative decoding (about 130 to 180 tokens/s on an RTX 3070 Ti).
+3. Create the models and pull the embedding model:
+
+   ```bash
+   ollama create simplixity-writer:4b-v1-q4_k_m -f Modelfile.writer
+   ollama create simplixity-router:2b-v1-q4_k_m -f Modelfile.router
+   ollama create simplixity-title:0.8b-v4-q4_k_m -f Modelfile.title
+   ollama pull embeddinggemma
+   ```
+
+4. Ollama keeps at most three models loaded by default, so with four it
+   unloads one for every run. Raise the limit, on Linux with a systemd drop-in:
+
+   ```bash
+   sudo systemctl edit ollama   # add the two lines below
+   ```
+
+   ```
+   [Service]
+   Environment="OLLAMA_MAX_LOADED_MODELS=4"
+   ```
+
+   On macOS, run `launchctl setenv OLLAMA_MAX_LOADED_MODELS 4` and restart
+   Ollama.
+5. In the settings, choose the four models with provider Ollama, and turn on
+   chat titles.
+
+On macOS, Ollama can also import the safetensors repos directly; each one has
+a Modelfile and the command to run.
 
 ### Without Docker
 
